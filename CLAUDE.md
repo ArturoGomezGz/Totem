@@ -39,7 +39,7 @@ Estructura de carpetas: `docs/project-structure.md`
 
 Antes de implementar las siguientes áreas, hay decisiones abiertas que las bloquean:
 
-- **Stack de Capa 2** — Python + FastAPI tentativo, DB no decidida (TimescaleDB vs. InfluxDB). Desbloquea: esquema de DB, contrato de API.
+- **Stack de Capa 2** — FastAPI + TimescaleDB + SQLAlchemy (sync) decididos (ver `docs/stack.md`). Desbloquea: esquema de DB, contrato de API.
 - **Protocolo ESP32 ↔ server** — HTTP/REST vs. MQTT. Pendiente de decidir.
 - **Algoritmo ML para Pn** — SVR, BPNN, ANN u otro. Ubicación de inferencia (dispositivo vs. server) pendiente. Ver [Notion — Módulo de Decisión de Riego](https://app.notion.com/p/3849cfa57faf80b0b57de6bf147fb988).
 - **Función Pn → duración de ciclo de riego** — pendiente de definir.
