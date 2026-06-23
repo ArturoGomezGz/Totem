@@ -30,7 +30,7 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 **Ciclo de operación principal**
 
 - FR-01: El sistema debe leer todos los sensores configurados en intervalos de 1 a 5 minutos de forma continua y autónoma
-- FR-02: Con cada lectura de sensores, el Módulo de Decisión de Riego (ver `docs/irrigation-module.md`) debe determinar autónomamente si activar la bomba y por cuánto tiempo, en función del perfil de cultivo activo (ver `docs/crop-profile.md`) — sin intervención humana
+- FR-02: Con cada lectura de sensores, el Módulo de Decisión de Riego (ver `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`) debe determinar autónomamente si activar la bomba y por cuánto tiempo, en función del perfil de cultivo activo (ver `docs/transversal/crop-profile.md`) — sin intervención humana
 - FR-03: La decisión de riego y la duración del ciclo deben ser determinadas por el Módulo de Decisión de Riego — no son valores fijos ni configurados manualmente en el firmware
 - FR-04: El sistema debe registrar localmente cada evento de actuación de la bomba (ON/OFF) con timestamp y duración del ciclo
 
@@ -43,7 +43,7 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 **Configuración inicial**
 
 - FR-08: El sistema debe permitir configurar las credenciales WiFi sin necesidad de reprogramar el dispositivo — mediante un mecanismo accesible para usuarios sin experiencia técnica (ej. portal cautivo desde el celular)
-- FR-09: El ESP32 debe consultar al backend en cada ciclo de lectura si existe un comando pendiente (override, cambio de perfil) — patrón polling, sin conexión persistente. Latencia máxima aceptable = intervalo de ciclo (1–5 min)
+- FR-09: El ESP32 debe mantener una conexión persistente con el broker MQTT y recibir comandos (override, cambio de perfil) por suscripción — sin polling. Latencia de entrega: milisegundos desde que el server publica el comando
 - FR-10: El firmware del ESP32 debe soportar actualizaciones remotas OTA (Over The Air) — el dispositivo verifica si existe una nueva versión disponible en el backend, la descarga, verifica su integridad, y se reinicia con la nueva versión. Debe incluirse en el MVP.
 
 **Alertas desde el dispositivo**
@@ -57,19 +57,19 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 
 **Ingesta de datos**
 
-- FR-13: El backend debe exponer un endpoint para recibir lecturas de sensores enviadas por los ESP32, incluyendo lecturas con timestamp pasado (reenvíos del buffer)
+- FR-13: El backend debe suscribirse al topic MQTT `totem/{unit_id}/readings` y persistir cada lectura recibida, incluyendo lecturas con timestamp pasado (reenvíos del buffer offline)
 - FR-14: El backend debe persistir todas las lecturas recibidas en la base de datos con retención indefinida
 
 **Gestión de dispositivos y perfiles**
 
 - FR-15: El backend debe permitir registrar unidades Totem y asociarlas a una instalación/usuario
-- FR-16: El backend debe permitir crear, editar y asignar perfiles de cultivo (ver `docs/crop-profile.md`) a unidades Totem
-- FR-17: El backend debe servir el perfil de cultivo activo a cada ESP32 cuando lo solicite
+- FR-16: El backend debe permitir crear, editar y asignar perfiles de cultivo (ver `docs/transversal/crop-profile.md`) a unidades Totem
+- FR-17: El backend debe publicar el perfil de cultivo activo al topic MQTT `totem/{unit_id}/profile` cuando se asigne o actualice una unidad — el ESP32 lo recibe por suscripción y lo cachea en flash
 
 **Override y control manual**
 
 - FR-18: El backend debe exponer un mecanismo para que el dashboard envíe comandos de override a una unidad Totem (forzar bomba ON/OFF, pausar modo autónomo por tiempo definido)
-- FR-19: El backend debe mantener una cola de comandos pendientes por dispositivo. El ESP32 los consulta y consume en su ciclo de lectura (polling). Latencia máxima aceptable: 1–5 min — el override no es una acción de emergencia.
+- FR-19: El backend debe publicar comandos al topic MQTT `totem/{unit_id}/commands` con QoS 1 — el ESP32 los recibe por suscripción en milisegundos. El broker garantiza la entrega aunque el dispositivo esté temporalmente desconectado (sesión persistente).
 - FR-20: El backend debe alojar los binarios compilados del firmware y exponer un endpoint que indique al ESP32 si existe una versión más reciente que la instalada, junto con la URL de descarga y un hash de verificación de integridad
 
 **Autenticación**
@@ -155,7 +155,7 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 
 ### NFR — Seguridad
 
-- NFR-07: Todas las comunicaciones entre el ESP32 y el backend deben ir cifradas (HTTPS/TLS)
+- NFR-07: Todas las comunicaciones entre el ESP32 y el broker MQTT deben ir cifradas (MQTT sobre TLS — MQTTS, puerto 8883). Las comunicaciones HTTP entre el ESP32 y el server (descarga de binarios OTA) deben ir cifradas (HTTPS/TLS).
 - NFR-08: Cada dispositivo ESP32 debe autenticarse ante el backend con credenciales únicas por unidad
 - NFR-09: El acceso al dashboard debe requerir autenticación de usuario; cada usuario solo puede ver y controlar sus propias instalaciones
 - NFR-10: La revocación de acceso de dispositivos individuales no es un requerimiento del MVP — la seguridad se cubre con credenciales únicas por unidad (NFR-08).

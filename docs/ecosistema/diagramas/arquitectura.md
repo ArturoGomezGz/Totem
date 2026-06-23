@@ -6,7 +6,7 @@ Este documento describe la arquitectura completa del sistema de forma estructura
 
 ## Visión general
 
-Totem es un sistema aeropónico vertical modular controlado por software. Tiene dos capas independientes que se comunican por HTTP/REST sobre HTTPS:
+Totem es un sistema aeropónico vertical modular controlado por software. Tiene dos capas independientes que se comunican via MQTT (dispositivos ↔ server) y HTTP/REST (dashboard ↔ server):
 
 - **Capa 1 — Edge (ESP32):** opera localmente en cada unidad física. Sensa, decide y actúa sin depender de internet.
 - **Capa 2 — Server:** almacena datos, expone el dashboard y envía notificaciones. Deployment-agnostic (Raspberry Pi, VPS o cloud).
@@ -40,7 +40,8 @@ Todos los componentes de este grupo corren en el mismo host (Raspberry Pi, VPS o
 
 | Componente | Descripción |
 |---|---|
-| **FastAPI (API REST)** | Backend principal. Recibe lecturas y eventos de los ESP32, sirve perfiles de cultivo, mantiene la cola de comandos, expone el histórico al dashboard y gestiona OTA |
+| **Broker MQTT (Mosquitto)** | Intermediario de mensajes entre ESP32 y FastAPI. Recibe publicaciones de los dispositivos y las reenvía a los suscriptores. Publica comandos y perfiles a topics por unidad. |
+| **FastAPI (API REST)** | Backend principal. Suscrito al broker para persistir lecturas, eventos y alertas. Publica comandos y perfiles al broker. Expone el histórico al dashboard y gestiona OTA. |
 | **TimescaleDB** | Base de datos única. Hypertable `readings` para series de tiempo (lecturas de sensores) + tablas relacionales: `units`, `users`, `crop_profiles`, `pump_events`, `commands`, `alerts` |
 | **React + Vite (Dashboard web)** | Frontend SPA. Se sirve como archivos estáticos. El navegador del usuario hace polling a la API cada 30–60 segundos para actualizar la vista |
 | **Bot de Telegram** | Módulo del server que envía notificaciones y alertas al usuario via HTTP a la API de Telegram. En el MVP es solo pasivo (envío); comandos bidireccionales son feature futura |
@@ -56,7 +57,7 @@ Todos los componentes de este grupo corren en el mismo host (Raspberry Pi, VPS o
 
 | Componente | Descripción |
 |---|---|
-| **Simulator (Python)** | Genera lecturas sintéticas y las envía al server exactamente igual que un ESP32 real. Usa la misma autenticación (API key) y los mismos endpoints. Permite desarrollar DB, frontend y ML sin hardware físico |
+| **Simulator (Python)** | Genera lecturas sintéticas y las envía al server exactamente igual que un ESP32 real. Usa la misma autenticación (API key) y los mismos topics MQTT. Permite desarrollar DB, frontend y ML sin hardware físico |
 
 ---
 
@@ -72,7 +73,7 @@ Módulo de Decisión de Riego ──[Pn < umbral → ON + duración]──► Bo
 ESP32 ──[evento ON/OFF + timestamp + duración]──► Buffer offline (flash)
 ```
 
-- Frecuencia: cada 1–5 minutos (configurable, 5 min por defecto)
+- Frecuencia: configurable — 🔴 intervalo exacto pendiente de cerrar (ver `ecosistema/overview.md`)
 - Latencia decisión → actuación: < 5 segundos (NFR-01)
 - Este flujo **no depende de WiFi ni del server**. Si no hay conexión, continúa sin interrupción.
 
@@ -91,55 +92,57 @@ Flotador alto (90%) ──[sumergido]──► ESP32 ──[cierra]──► Vá
 ### F2 — Envío periódico de datos al server (cuando hay WiFi)
 
 ```
-ESP32 ──[POST /api/v1/readings, HTTPS, X-API-Key]──► FastAPI
-ESP32 ──[POST /api/v1/events, HTTPS, X-API-Key]──► FastAPI
+ESP32 ──[MQTT PUBLISH totem/{unit_id}/readings, QoS 1]──► Mosquitto
+ESP32 ──[MQTT PUBLISH totem/{unit_id}/events, QoS 1]──► Mosquitto
+Mosquitto ──[forward a suscriptores]──► FastAPI
 FastAPI ──[INSERT]──► TimescaleDB
 ```
 
-- Frecuencia: cada 5 minutos en modo normal
-- Si no hay WiFi: las lecturas se acumulan en el Buffer offline y se reenvían en orden al reconectar (FR-06)
-- Payload de `/readings`: `{ unit_id, timestamp, temperature, humidity, light, co2 }` — el nivel de tanque no se incluye en readings
-- Payload de `/events`: `{ unit_id, timestamp, action, duration_seconds, trigger }`
+- Frecuencia: 🔴 pendiente de cerrar (ver `ecosistema/overview.md`)
+- Si no hay WiFi: lecturas y eventos se acumulan en el Buffer offline (flash) y se publican al reconectar (FR-06)
+- El nivel de tanque no se incluye en `readings` — solo genera alertas
 
-### F3 — Alerta crítica (envío inmediato, sin esperar timer)
+### F3 — Alerta crítica (publicación inmediata, sin esperar timer)
 
 ```
 ESP32 ──[detecta condición crítica]──► ESP32
-ESP32 ──[POST /api/v1/alerts, HTTPS, X-API-Key, inmediato]──► FastAPI
+ESP32 ──[MQTT PUBLISH totem/{unit_id}/alerts, QoS 1, inmediato]──► Mosquitto
+Mosquitto ──[forward]──► FastAPI
 FastAPI ──[INSERT alerts]──► TimescaleDB
 FastAPI ──[HTTP a Telegram API]──► Bot de Telegram ──► Usuario
 ```
 
-- Condiciones que disparan envío inmediato: tanque bajo (flotador 30% en aire), sensor desconectado, fallo de bomba
-- El server guarda la alerta en DB y dispara la notificación de Telegram en el mismo flujo
+- Condiciones: tanque bajo (flotador 30° en aire), sensor desconectado, fallo de bomba
+- El server guarda la alerta en DB y dispara Telegram en el mismo flujo
 - Si no hay salida a internet, la alerta queda en DB con `status = pending` y se envía al reconectar (FR-37)
 
-### F4 — Polling de comandos y perfil (ESP32 → server, cada ciclo)
+### F4 — Entrega de comandos y perfil (server → ESP32, push)
 
 ```
-ESP32 ──[GET /api/v1/units/{unit_id}/commands, HTTPS, X-API-Key]──► FastAPI
-FastAPI ──[SELECT comandos pendientes]──► TimescaleDB
-FastAPI ──[lista de comandos]──► ESP32
+FastAPI ──[MQTT PUBLISH totem/{unit_id}/commands, QoS 1]──► Mosquitto
+Mosquitto ──[forward al suscriptor]──► ESP32
 ESP32 ──[ejecuta: pump_on / pump_off / pause_autonomous / update_profile / valve_open / valve_close]──► Bomba, Válvula NC o Perfil de Cultivo (flash)
 
-ESP32 ──[GET /api/v1/units/{unit_id}/profile, HTTPS, X-API-Key]──► FastAPI
-FastAPI ──[SELECT perfil activo]──► TimescaleDB
-FastAPI ──[perfil de cultivo]──► ESP32
+FastAPI ──[MQTT PUBLISH totem/{unit_id}/profile, QoS 1]──► Mosquitto
+Mosquitto ──[forward]──► ESP32
 ESP32 ──[guarda]──► Perfil de Cultivo (caché flash)
 ```
 
-- Latencia máxima de un comando: 1–5 minutos (el override no es acción de emergencia, FR-19)
-- El ESP32 marca cada comando como consumido (`consumed_at`) al procesarlo
+- Latencia de entrega: milisegundos desde que FastAPI publica al broker
+- El ESP32 está suscrito a sus topics desde el momento de conexión
+- QoS 1 garantiza entrega at-least-once sin retry manual en el firmware
 
 ### F5 — OTA (Over The Air firmware update)
 
 ```
-ESP32 ──[GET /api/v1/firmware/latest, HTTPS, X-API-Key]──► FastAPI
-FastAPI ──[{ version, download_url, hash }]──► ESP32
-ESP32 ──[si versión > instalada: descarga binario]──► FastAPI
+FastAPI ──[MQTT PUBLISH totem/{unit_id}/ota, QoS 1, { version, download_url, hash }]──► Mosquitto
+Mosquitto ──[forward]──► ESP32
+ESP32 ──[si versión > instalada: GET /api/v1/firmware/{version}/binary, HTTPS]──► FastAPI
 ESP32 ──[verifica hash de integridad]──► ESP32
 ESP32 ──[reinicia con nuevo firmware / rollback si falla]──► ESP32
 ```
+
+- La notificación llega por MQTT; la descarga del binario es HTTP (MQTT no es adecuado para payloads grandes)
 
 ### F6 — Dashboard (usuario → server)
 
@@ -161,36 +164,38 @@ FastAPI ──[SELECT]──► TimescaleDB ──[datos]──► FastAPI ─�
 ```
 Navegador ──[POST /api/v1/units/{id}/commands, Bearer JWT]──► FastAPI
 FastAPI ──[INSERT en tabla commands]──► TimescaleDB
-ESP32 ──[próximo ciclo de polling]──► FastAPI ──[comando]──► ESP32
+FastAPI ──[MQTT PUBLISH totem/{unit_id}/commands, QoS 1]──► Mosquitto ──► ESP32
 ESP32 ──[ejecuta override]──► Bomba
 ```
+
+- El comando llega al ESP32 en milisegundos desde que el usuario lo envía desde el dashboard
 
 ### F8 — Gestión de perfiles de cultivo
 
 ```
 Navegador ──[POST /api/v1/profiles, Bearer JWT]──► FastAPI ──[INSERT]──► TimescaleDB
 Navegador ──[PUT /api/v1/units/{id}/profile, Bearer JWT]──► FastAPI
-FastAPI ──[encola update_profile en commands]──► TimescaleDB
-ESP32 ──[polling]──► FastAPI ──[nuevo perfil]──► ESP32 ──[guarda en flash]──► Perfil de Cultivo (caché flash)
+FastAPI ──[MQTT PUBLISH totem/{unit_id}/profile, QoS 1]──► Mosquitto ──► ESP32
+ESP32 ──[guarda en flash]──► Perfil de Cultivo (caché flash)
 ```
 
 ### F9 — Simulador (reemplaza al ESP32 en desarrollo)
 
 ```
-Simulator ──[POST /api/v1/readings, HTTPS, X-API-Key]──► FastAPI  (idéntico a F2)
-Simulator ──[POST /api/v1/events, HTTPS, X-API-Key]──► FastAPI    (idéntico a F2)
-Simulator ──[GET /api/v1/units/{id}/commands, HTTPS, X-API-Key]──► FastAPI  (idéntico a F4)
+Simulator ──[MQTT PUBLISH totem/{unit_id}/readings, QoS 1]──► Mosquitto  (idéntico a F2)
+Simulator ──[MQTT PUBLISH totem/{unit_id}/events, QoS 1]──► Mosquitto    (idéntico a F2)
+Simulator ──[suscrito a totem/{unit_id}/commands]──► Mosquitto            (idéntico a F4)
 ```
 
 ---
 
 ## Autenticación — resumen
 
-| Actor | Mecanismo | Header |
+| Actor | Mecanismo | Credencial |
 |---|---|---|
-| ESP32 → API | API key por unidad (única, generada al registrar) | `X-API-Key: <clave>` |
-| Simulator → API | Misma API key que un ESP32 | `X-API-Key: <clave>` |
-| Dashboard → API | JWT (expira en ~1h) + refresh token de larga duración | `Authorization: Bearer <jwt>` |
+| ESP32 → Broker MQTT | Username/password ante Mosquitto | `username: unit_id` / `password: api_key` |
+| Simulator → Broker MQTT | Mismas credenciales que un ESP32 | `username: unit_id` / `password: api_key` |
+| Dashboard → API HTTP | JWT (expira en ~1h) + refresh token | `Authorization: Bearer <jwt>` |
 
 ---
 
@@ -201,12 +206,11 @@ El perfil es el nexo entre la Capa 2 y la lógica de decisión de la Capa 1:
 ```
 1. Usuario crea/edita perfil → dashboard → POST/PUT /api/v1/profiles → TimescaleDB
 2. Usuario asigna perfil a unidad → dashboard → PUT /api/v1/units/{id}/profile → FastAPI
-3. FastAPI encola comando update_profile en tabla commands
-4. ESP32 en próximo ciclo → GET /api/v1/units/{id}/commands → recibe update_profile
-5. ESP32 descarga perfil → GET /api/v1/units/{id}/profile
-6. ESP32 guarda en flash (sobreescribe anterior)
-7. Módulo de Decisión de Riego usa el nuevo perfil desde ese momento
-8. Sin conexión: ESP32 sigue usando el último perfil conocido en flash
+3. FastAPI publica perfil → MQTT PUBLISH totem/{unit_id}/profile → Mosquitto
+4. ESP32 (suscrito) recibe el perfil en milisegundos
+5. ESP32 guarda en flash (sobreescribe anterior)
+6. Módulo de Decisión de Riego usa el nuevo perfil desde ese momento
+7. Sin conexión: ESP32 sigue usando el último perfil conocido en flash
 ```
 
 ---

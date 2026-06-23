@@ -50,7 +50,7 @@ SVR es particularmente efectivo con conjuntos de datos pequeños — relevante p
 
 ### Ubicación de inferencia
 
-**Decidido: en dispositivo** (22 jun 2026) — el modelo corre en el ESP32 como archivo `.tflite`. La inferencia es completamente local y no depende del server. Ver `docs/architecture.md`.
+**Decidido: en dispositivo** (22 jun 2026) — el modelo corre en el ESP32 como archivo `.tflite`. La inferencia es completamente local y no depende del server. Ver `docs/ecosistema/overview.md`.
 
 ### Selección de algoritmo
 
@@ -65,7 +65,7 @@ SVR es particularmente efectivo con conjuntos de datos pequeños — relevante p
 - Pn estimado **< umbral del perfil activo** → activar bomba (duración dinámica)
 - Pn estimado **≥ umbral** → no regar
 
-El umbral no es una constante global — varía por especie de cultivo y etapa de crecimiento. Lo provee el Perfil de Cultivo Activo en tiempo de ejecución (ver `docs/crop-profile.md`).
+El umbral no es una constante global — varía por especie de cultivo y etapa de crecimiento. Lo provee el Perfil de Cultivo Activo en tiempo de ejecución (ver `docs/transversal/crop-profile.md`).
 
 ### Función Pn → duración del ciclo
 
@@ -110,6 +110,6 @@ Distintos usuarios cultivan distintas especies. Las especies difieren significat
 
 ## Documentos relacionados
 
-- `docs/crop-profile.md` — el umbral de Pn y la función de duración son parámetros del perfil
+- `docs/transversal/crop-profile.md` — el umbral de Pn y la función de duración son parámetros del perfil
 - `docs/requirements.md` — FR-02, FR-03
-- `docs/architecture.md` — ubicación de inferencia, flujo de datos del módulo
+- `docs/ecosistema/overview.md` — ubicación de inferencia, flujo de datos del módulo

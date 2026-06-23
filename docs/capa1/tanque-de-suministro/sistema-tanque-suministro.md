@@ -109,4 +109,4 @@ El tanque padre es un sistema autónomo, no una extensión del Totem.
 
 - `docs/requirements.md` — FR-39 a FR-42 (válvula NC y flotadores, parte del MVP)
 - `docs/planned-features.md` — referenciado como feature futura
-- `docs/architecture.md` — comportamiento del sistema de nivel de tanque en Capa 1
+- `docs/ecosistema/overview.md` — comportamiento del sistema de nivel de tanque en Capa 1

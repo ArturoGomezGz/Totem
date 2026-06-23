@@ -15,8 +15,8 @@ Documentación de referencia completa: [Notion — Arquitectura](https://app.not
 │                                         │
 │  Opera sin internet. Siempre activo.    │
 └─────────────────┬───────────────────────┘
-                  │ HTTP/REST (cuando hay conexión)
-                  │ cada 5 min · inmediato en alertas críticas
+                  │ MQTT (cuando hay WiFi)
+                  │ publicación continua · comandos por suscripción
 ┌─────────────────▼───────────────────────┐
 │  Capa 2 — Server (deployment-agnostic)  │
 │                                         │
@@ -32,11 +32,13 @@ Documentación de referencia completa: [Notion — Arquitectura](https://app.not
 
 Cada unidad Totem tiene exactamente un ESP32. Nunca se comparte entre varias unidades.
 
-**Ciclo principal (cada 5 min):**
+**Ciclo principal:**
 1. Leer sensores: T, RH, Li, CO₂, nivel de tanque
 2. Ejecutar Módulo de Decisión de Riego → determinar si activar bomba y por cuánto tiempo
 3. Registrar evento en buffer local (flash)
-4. Si hay conexión: enviar lecturas y eventos al server, consultar comandos pendientes y perfil actualizado
+4. Si hay WiFi: publicar lecturas y eventos al broker MQTT; recibir comandos y perfil actualizado por suscripción
+
+El intervalo del ciclo y la frecuencia de publicación MQTT son decisiones pendientes de cerrar (ver sección correspondiente abajo).
 
 **Comportamiento offline:** la decisión de riego continúa sin interrupción usando el Perfil de Cultivo Activo cacheado en flash. Lo que se degrada sin conexión: acceso remoto al dashboard y notificaciones.
 
@@ -63,7 +65,7 @@ Vive en la DB de Capa 2, se cachea en flash del ESP32. Se asigna y cambia desde 
 Stack deployment-agnostic. La misma codebase corre en Raspberry Pi, VPS o cloud sin modificaciones.
 
 **Componentes:**
-- **API** — recibe lecturas de sensores, sirve perfiles de cultivo, mantiene cola de comandos por dispositivo, expone endpoints de OTA
+- **API** — suscrita al broker MQTT para persistir lecturas, eventos y alertas; publica comandos y perfiles a topics por unidad; expone endpoints HTTP para el dashboard y descarga de binarios OTA
 - **Base de datos** — series de tiempo para lecturas de sensores + tablas relacionales para metadatos (stack exacto pendiente de decidir: TimescaleDB vs. InfluxDB)
 - **Frontend** — dashboard web responsive en español (con i18n), polling cada 30–60s, gráficas de T/RH/Pn/eventos de riego, control manual de bomba, gestión de perfiles
 - **Alertas** — recibe condiciones críticas del ESP32, notifica por push/SMS/email según disponibilidad del entorno
@@ -76,9 +78,9 @@ Stack deployment-agnostic. La misma codebase corre en Raspberry Pi, VPS o cloud 
 | Capa 2 | Server deployment-agnostic (RPi, VPS, cloud sin cambios de código) | 19 jun 2026 |
 | Modo sin internet | Riego continúa sin degradación; dashboard y alertas se interrumpen (aceptable) | 18 jun 2026 |
 | Deploy | Docker Compose o equivalente — requisito central de portabilidad | — |
-| Protocolo ESP32 ↔ server | HTTP/REST sobre HTTPS | 22 jun 2026 |
-| Intervalo de comunicación | 5 min fijo en modo normal; envío inmediato ante alerta crítica (tanque bajo, sensor desconectado) | 22 jun 2026 |
-| Autenticación de dispositivos | API key por unidad — header `X-API-Key` en cada request | 22 jun 2026 |
+| Protocolo ESP32 ↔ server | MQTT con broker Mosquitto. Conexión persistente con TLS. El ESP32 publica lecturas y eventos; se suscribe a comandos, perfil y OTA. ~~HTTP/REST (decisión anterior — 22 jun 2026, reemplazada)~~ | 23 jun 2026 |
+| Intervalo de comunicación | Pendiente de cerrar — ver "Decisiones pendientes" | — |
+| Autenticación de dispositivos | API key por unidad — `unit_id` como client ID MQTT, API key como contraseña | 22 jun 2026 |
 | Autenticación de usuarios | JWT con refresh token — header `Authorization: Bearer` | 22 jun 2026 |
 | Esquema de lecturas de sensores | Tabla ancha — una columna por tipo de sensor (T, RH, Li, CO₂). Nivel de tanque no se persiste en `readings` — solo genera alertas. | 22 jun 2026 |
 | Ubicación de inferencia ML (Pn) | En dispositivo — modelo `.tflite` embebido en el ESP32. La inferencia corre localmente sin depender del server. | 22 jun 2026 |
@@ -92,13 +94,15 @@ Stack deployment-agnostic. La misma codebase corre en Raspberry Pi, VPS o cloud 
 
 Estas preguntas bloquean la implementación del firmware:
 
-- **Aprovisionamiento de unidades** — ¿Cómo obtiene el ESP32 su API key inicial? No hay endpoint de registro documentado. ¿Provisioning manual via el dashboard? ¿Cómo llega la key al dispositivo (serial, BLE, config file)?
-- **Política del buffer offline** — Tamaño en flash, política de descarte (FIFO vs. drop-newest), intervalo de retry al reconectar, orden de reenvío (secuencial vs. lote).
-- **Confirmación de ejecución de comandos** — El campo `consumed_at` en `commands` marca recepción, pero ¿el firmware reporta el resultado? Si `pump_on` falla (bomba no responde), ¿genera una alerta o actualiza el estado del comando?
-- **Comportamiento en primer arranque (factory state)** — Sin perfil en flash, ¿qué hace el ESP32? ¿Espera conectarse al server antes del primer ciclo de riego? ¿Tiene parámetros de emergencia por defecto?
+- **Intervalo del ciclo de decisión** — ¿Cada cuánto corre el ciclo completo (lectura de sensores + inferencia ML + decisión de riego)? Candidato: 3 min.
+- **Intervalo de publicación MQTT** — ¿El ciclo de telemetría coincide con el de decisión o son independientes? Candidato: mismo intervalo (3 min); eventos críticos siempre inmediatos.
+- **Aprovisionamiento de unidades** — ¿Cómo obtienen el ESP32 su `unit_id` y API key iniciales? ¿Provisioning manual via dashboard? ¿Cómo llegan las credenciales al dispositivo (serial, BLE, config file)?
+- **Política del buffer offline** — Tamaño en flash, política de descarte (FIFO vs. drop-newest), orden de reenvío al reconectar.
+- **Confirmación de ejecución de comandos** — El ESP32 recibe el comando via MQTT (QoS 1 garantiza entrega), pero ¿reporta el resultado de ejecución? Si `pump_on` falla, ¿publica una alerta o un ACK de fallo?
+- **Comportamiento en primer arranque (factory state)** — Sin perfil en flash, ¿qué hace el ESP32? ¿Espera recibir el perfil via MQTT antes del primer ciclo de riego? ¿Tiene parámetros de emergencia por defecto?
 - **Frescura del perfil cacheado** — ¿Tiene TTL el caché en flash? Si el ESP32 lleva semanas offline, ¿el perfil cacheado sigue siendo válido indefinidamente?
-- **Intervalo de chequeo de OTA** — ¿Se chequea en cada ciclo (5 min) o con un intervalo propio más largo? Trade-off: latencia de actualización vs. overhead de requests.
-- **Manejo de error 401** — Si el server devuelve 401 (API key revocada o inválida), ¿qué hace el ESP32? ¿Entra en modo offline indefinido?
+- **OTA** — La notificación llega por MQTT; la descarga del binario es HTTP. ¿Verificación de firma criptográfica además del hash?
+- **Manejo de fallo de autenticación MQTT** — Si el broker rechaza las credenciales del ESP32, ¿qué hace? ¿Reintenta, entra en modo solo-local indefinido?
 
 ### ML
 

@@ -1,6 +1,6 @@
 # Esquema de Base de Datos
 
-TimescaleDB (extensión de PostgreSQL). Stack completo en `docs/stack.md`.
+TimescaleDB (extensión de PostgreSQL). Stack completo en `docs/capa2/stack.md`.
 
 Las entidades están identificadas; los campos pendientes se marcan con 🔴.
 
@@ -82,7 +82,7 @@ Parametrizan el Módulo de Decisión de Riego.
 
 ### `commands`
 
-Cola de comandos pendientes por unidad. El ESP32 los consume en polling.
+Historial de comandos enviados por unidad. Con MQTT los comandos se entregan por push al topic `totem/{unit_id}/commands` — ya no hay polling. La tabla funciona como registro de auditoría y fuente de datos para el dashboard.
 
 | Campo | Tipo | Notas |
 |---|---|---|
@@ -91,7 +91,8 @@ Cola de comandos pendientes por unidad. El ESP32 los consume en polling.
 | `type` | VARCHAR NOT NULL | `pump_on`, `pump_off`, `pause_autonomous`, `update_profile`, `valve_open`, `valve_close` |
 | `payload` | JSONB | Parámetros del comando |
 | `created_at` | TIMESTAMPTZ NOT NULL | |
-| `consumed_at` | TIMESTAMPTZ | NULL = pendiente; valor = consumido |
+| `delivered_at` | TIMESTAMPTZ | Timestamp de publicación MQTT exitosa al broker |
+| `ack_at` | TIMESTAMPTZ | 🔴 Pendiente: ¿el ESP32 publica un ACK de ejecución? Si sí, se registra aquí |
 
 ### `alerts`
 

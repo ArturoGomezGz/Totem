@@ -62,6 +62,26 @@ SQLAlchemy soporta async de forma nativa — la migración es quirúrgica, no un
 
 ---
 
+## Broker MQTT — Mosquitto
+
+**Estado:** decidido · 23 jun 2026
+
+**Decisión:** el broker MQTT del sistema es Eclipse Mosquitto.
+
+**Razones:**
+
+- **Liviano:** corre sin problema en Raspberry Pi — un contenedor Docker con uso de memoria mínimo.
+- **Imagen Docker oficial:** `eclipse-mosquitto` — un servicio más en el `docker-compose`, sin infraestructura adicional.
+- **Soporte TLS nativo:** MQTTS (puerto 8883) sin dependencias externas.
+- **Autenticación por credenciales:** Mosquitto valida usuario/contraseña en el handshake MQTT — suficiente para el modelo de API key por unidad.
+- **Madurez y adopción:** broker de referencia para IoT embebido; documentación amplia, sin sorpresas operativas.
+
+**Rol en el sistema:** punto de entrada de todos los dispositivos ESP32. FastAPI se suscribe a los topics de lecturas, eventos y alertas para persistirlos; publica a los topics de comandos, perfiles y OTA para controlar dispositivos.
+
+**Pendiente de decidir dentro del stack Mosquitto:** configuración de sesiones persistentes (clean session vs. persistent session) — afecta el comportamiento del buffer offline al reconectar.
+
+---
+
 ## Convenciones de API
 
 **Estado:** decidido · 20 jun 2026
@@ -70,7 +90,7 @@ SQLAlchemy soporta async de forma nativa — la migración es quirúrgica, no un
 
 **Razón principal para versionar:** el ESP32 tiene los endpoints hardcodeados en su firmware. Si el contrato de API cambia en el futuro (formato de payload, estructura de respuesta), se introduce `/api/v2/` manteniendo `/api/v1/` activo para unidades en campo que aún no recibieron OTA. Sin versión, cualquier cambio de contrato rompe todos los clientes simultáneamente sin posibilidad de migración gradual.
 
-Ver contrato completo de endpoints, payloads y autenticación en `docs/api-contract.md`.
+Ver contrato completo de endpoints, payloads y autenticación en `docs/capa2/api-contract.md`.
 
 ---
 
