@@ -22,9 +22,10 @@ Notion se usa exclusivamente como capa de presentación limpia: módulos bien de
 | Esquema de base de datos | `docs/schema.md` |
 | Requerimientos (FR y NFR) | `docs/requirements.md` |
 | Perfil de Cultivo Activo | `docs/crop-profile.md` |
-| Módulo de Decisión de Riego | `docs/irrigation-module.md` *(pendiente de crear)* |
-| Sistema de Abastecimiento por Gravedad | `docs/gravity-feed.md` *(pendiente de crear)* |
+| Módulo de Decisión de Riego | `docs/irrigation-module.md` |
+| Sistema de Abastecimiento por Gravedad | `docs/gravity-feed.md` |
 | Features planificadas (post-MVP) | `docs/planned-features.md` |
+| Marco de evaluación del sistema | `docs/evaluation-framework.md` |
 | Estructura de carpetas | `docs/project-structure.md` |
 | Diagrama de componentes y flujos | `docs/diagramas/arquitectura.md` |
 
