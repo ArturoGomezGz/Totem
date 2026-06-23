@@ -3,9 +3,7 @@
 Todos los endpoints usan el prefijo `/api/v1/`. Ver decisión y justificación en `docs/stack.md`.
 
 Decisiones pendientes que bloquean completar este documento:
-- Protocolo ESP32 ↔ server (HTTP/REST vs. MQTT)
 - Esquema de base de datos (bloquea definir payloads exactos)
-- Mecanismo de autenticación de dispositivos
 
 ---
 
@@ -41,15 +39,39 @@ Decisiones pendientes que bloquean completar este documento:
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| `POST` | `/api/v1/auth/login` | Login de usuario (dashboard) |
-| `POST` | `/api/v1/auth/token` | Autenticación de dispositivo ESP32 |
+| `POST` | `/api/v1/auth/login` | Login de usuario (dashboard) — devuelve JWT |
+
+---
+
+## Autenticación — mecanismo
+
+### Dispositivos (ESP32 y simulator) → API key por unidad
+
+Cada unidad tiene una clave única generada en el momento del registro. Se incluye en todas las requests como header HTTP:
+
+```
+X-API-Key: <clave-de-la-unidad>
+```
+
+El server verifica que la clave existe y corresponde a una unidad activa. Si la clave es inválida o está revocada, devuelve `401 Unauthorized`.
+
+No hay endpoint de login para dispositivos — la clave se provisiona una sola vez al registrar la unidad en el dashboard y se almacena en el flash del ESP32.
+
+### Dashboard (frontend) → JWT
+
+El usuario hace login con email y contraseña. El server devuelve un JWT con expiración corta (ej. 1h) y un refresh token de vida más larga.
+
+```
+Authorization: Bearer <jwt>
+```
+
+El JWT se renueva automáticamente via refresh token sin requerir login manual. Si el refresh token expira, el usuario vuelve a hacer login.
 
 ---
 
 ## Notas pendientes de definir
 
-- **Formato exacto de payloads** — campos, tipos y unidades de cada endpoint. Bloqueado por: esquema de DB.
-- **Autenticación de dispositivos** — mecanismo concreto (API key por unidad, JWT, otro). Bloqueado por: decisión de protocolo.
+- **Formato exacto de payloads** — campos, tipos y unidades de cada endpoint. `tank_level` es VARCHAR enum (`full` / `half` / `critical`). Resto de campos pendientes de confirmar una vez cerrado el esquema completo.
 - **Paginación** — estrategia para el histórico de lecturas (cursor vs. offset).
 - **Formato de timestamps** — ISO 8601 UTC en todos los payloads (pendiente de confirmar).
 - **Códigos de error** — estructura estándar de respuestas de error.

@@ -6,7 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Sistema aeropónico vertical modular, solar y de código abierto para producción de alimentos. El código de este repo implementa la capa de software del sistema: firmware para ESP32 y un servidor de monitoreo y control.
 
-Documentación completa del proyecto: [Notion — Totem](https://app.notion.com/p/3819cfa57faf8043ac83cd09d101dc25)
+---
+
+## Documentación
+
+**El repositorio es la fuente de verdad completa y más actualizada.** Todos los documentos técnicos — decisiones cerradas, decisiones pendientes, contratos de API y esquemas — viven en `docs/`. Durante el desarrollo no es necesario consultar Notion.
+
+Notion se usa exclusivamente como capa de presentación limpia: módulos bien descritos, requerimientos organizados, contenido ya cerrado. No refleja work-in-progress ni decisiones pendientes.
+
+| Área | Documento local |
+|---|---|
+| Arquitectura del sistema | `docs/architecture.md` |
+| Stack técnico | `docs/stack.md` |
+| Contrato de API | `docs/api-contract.md` |
+| Esquema de base de datos | `docs/schema.md` |
+| Requerimientos (FR y NFR) | `docs/requirements.md` |
+| Perfil de Cultivo Activo | `docs/crop-profile.md` |
+| Módulo de Decisión de Riego | `docs/irrigation-module.md` *(pendiente de crear)* |
+| Sistema de Abastecimiento por Gravedad | `docs/gravity-feed.md` *(pendiente de crear)* |
+| Features planificadas (post-MVP) | `docs/planned-features.md` |
+| Estructura de carpetas | `docs/project-structure.md` |
+| Diagrama de componentes y flujos | `docs/diagramas/arquitectura.md` |
 
 ---
 
@@ -14,13 +34,13 @@ Documentación completa del proyecto: [Notion — Totem](https://app.notion.com/
 
 El sistema tiene dos capas independientes. Ver `docs/architecture.md` para el detalle completo.
 
-**Capa 1 — Firmware ESP32 (`firmware/`):** sensado, decisión autónoma de riego via estimación de Pn (tasa de fotosíntesis), buffer offline, OTA. Opera sin internet — la función crítica de riego nunca depende de la Capa 2.
+**Capa 1 — Firmware ESP32 (`firmware/`):** sensado, decisión autónoma de riego via estimación de Pn (tasa de fotosíntesis) con modelo `.tflite` embebido en el ESP32, buffer offline, OTA. Opera sin internet — la función crítica de riego nunca depende de la Capa 2.
 
-**Capa 2 — Server (`server/`, `frontend/`):** base de datos, API REST, dashboard web, alertas. Deployment-agnostic: misma codebase en Raspberry Pi, VPS o cloud. Se levanta con `docker compose up` desde `deploy/`.
+**Capa 2 — Server (`server/`, `frontend/`):** base de datos, API REST, dashboard web, alertas vía bot de Telegram. Deployment-agnostic: misma codebase en Raspberry Pi, VPS o cloud. Se levanta con `docker compose up` desde `deploy/`.
 
 **`simulator/`:** genera lecturas sintéticas y las envía al server igual que el ESP32 — permite desarrollar el stack completo sin hardware físico.
 
-**`ml/`:** entrenamiento e inferencia del modelo de estimación de Pn. Los modelos exportados van al firmware (`.tflite`) o al server según donde corra la inferencia (pendiente de decidir).
+**`ml/`:** entrenamiento del modelo de estimación de Pn. Los modelos exportados van al firmware como `.tflite` — la inferencia corre en el ESP32, no en el server.
 
 Estructura de carpetas: `docs/project-structure.md`
 
@@ -37,17 +57,25 @@ Estructura de carpetas: `docs/project-structure.md`
 
 ## Decisiones técnicas pendientes
 
-Antes de implementar las siguientes áreas, hay decisiones abiertas que las bloquean:
+Ver detalle completo en `docs/architecture.md`. Resumen de lo que bloquea el inicio de implementación:
 
-- **Stack de Capa 2** — FastAPI + TimescaleDB + SQLAlchemy (sync) decididos (ver `docs/stack.md`). Desbloquea: esquema de DB, contrato de API.
-- **Protocolo ESP32 ↔ server** — HTTP/REST vs. MQTT. Pendiente de decidir.
-- **Algoritmo ML para Pn** — SVR, BPNN, ANN u otro. Ubicación de inferencia (dispositivo vs. server) pendiente. Ver [Notion — Módulo de Decisión de Riego](https://app.notion.com/p/3849cfa57faf80b0b57de6bf147fb988).
-- **Función Pn → duración de ciclo de riego** — pendiente de definir.
+**Firmware ↔ server — interfaz:**
+- Aprovisionamiento de unidades (cómo llega la API key al ESP32)
+- Política del buffer offline (tamaño, descarte, retry)
+- Confirmación de ejecución de comandos
+- Comportamiento en primer arranque (factory state)
+- Frescura del perfil cacheado (TTL)
+- Intervalo de chequeo de OTA
+- Manejo de error 401
 
-No implementar estas áreas sin haber cerrado la decisión correspondiente.
+**ML:**
+- Algoritmo para estimación de Pn (SVR, BPNN, ANN u otro)
+- Función Pn → duración de ciclo de riego
+
+No implementar estas áreas sin haber cerrado la decisión correspondiente. Ver `docs/architecture.md` para el contexto completo de cada ítem.
 
 ---
 
 ## Estado actual
 
-El proyecto está en etapa de inicio — no hay código todavía. El stack técnico y el contrato de API están pendientes de definir. El punto de partida recomendado es el simulador de sensores, ya que desbloquea el desarrollo del server y el dashboard sin necesitar hardware.
+Etapa de diseño — no hay código todavía. Stack técnico y contrato de API definidos (ver `docs/`). Las decisiones pendientes del firmware listadas arriba bloquean su implementación. El punto de partida recomendado es el simulador de sensores, ya que desbloquea el desarrollo del server y el dashboard sin necesitar hardware ni resolver las decisiones del firmware.
