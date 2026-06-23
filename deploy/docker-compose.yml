@@ -2,6 +2,8 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: totem-mosquitto
+    user: root
+    entrypoint: ["/bin/sh", "-c", "chown mosquitto:mosquitto /mosquitto/config/passwd && chmod 600 /mosquitto/config/passwd && exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf"]
     ports:
       - "1883:1883"
     volumes:
