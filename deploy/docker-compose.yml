@@ -12,6 +12,15 @@ services:
       - mosquitto-logs:/mosquitto/log
     restart: unless-stopped
 
+  frontend:
+    build: ../frontend
+    container_name: totem-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
   api:
     build: ../server
     container_name: totem-api

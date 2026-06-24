@@ -46,8 +46,20 @@ class MQTTClient:
         try:
             payload = json.loads(msg.payload.decode())
             print(f"[mqtt] {msg.topic} | {payload}")
+            self._handle(msg.topic, payload)
         except Exception:
             print(f"[mqtt] payload invalido en {msg.topic}")
+
+    def _handle(self, topic: str, payload: dict) -> None:
+        import state
+        parts = topic.split("/")
+        if len(parts) != 3:
+            return
+        unit_id, kind = parts[1], parts[2]
+        if kind == "readings":
+            state.update_readings(unit_id, payload)
+        elif kind == "events" and "action" in payload:
+            state.update_pump(unit_id, payload["action"])
 
 
 mqtt_client = MQTTClient()
