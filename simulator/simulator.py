@@ -25,7 +25,7 @@ class TotemSimulator:
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        print(f"[sim] unidad '{UNIT_ID}' → {MQTT_HOST}:{MQTT_PORT}")
+        print(f"[sim] unidad '{UNIT_ID}' -> {MQTT_HOST}:{MQTT_PORT}")
         self._client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
         self._client.loop_start()
         self._publish_loop()
@@ -115,11 +115,11 @@ class TotemSimulator:
             }
             self._publish(f"totem/{UNIT_ID}/readings", payload)
             print(
-                f"[sim] lecturas — "
-                f"T={readings['temperature']}°C  "
+                f"[sim] lecturas | "
+                f"T={readings['temperature']}C  "
                 f"RH={readings['humidity']}%  "
                 f"Li={readings['light']} PAR  "
-                f"CO₂={readings['co2']}ppm  "
+                f"CO2={readings['co2']}ppm  "
                 f"bomba={'ON' if self._pump_on else 'OFF'}"
             )
             time.sleep(PUBLISH_INTERVAL)
