@@ -1,0 +1,14 @@
+# Este archivo es solo una referencia del formato.
+# El archivo real (passwd) se genera con el comando del setup inicial — ver abajo.
+#
+# Para generar passwd:
+#
+#   Primera vez (crea el archivo):
+#   docker run --rm -v "%cd%\mosquitto\config:/mosquitto/config" eclipse-mosquitto:2 \
+#     mosquitto_passwd -c /mosquitto/config/passwd sim-001
+#
+#   Agregar usuarios adicionales (sin -c para no sobreescribir):
+#   docker run --rm -v "%cd%\mosquitto\config:/mosquitto/config" eclipse-mosquitto:2 \
+#     mosquitto_passwd -b /mosquitto/config/passwd <username> <password>
+#
+# El archivo passwd generado NO debe commitearse al repositorio.

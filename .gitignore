@@ -1,0 +1,12 @@
+# Entornos Python
+.env
+__pycache__/
+*.pyc
+.venv/
+
+# Mosquitto — credenciales generadas localmente
+deploy/mosquitto/config/passwd
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
