@@ -10,13 +10,13 @@
 #include "nvs_flash.h"
 #include "mqtt_client.h"
 
-#define WIFI_SSID          "IoT"
-#define WIFI_PASSWORD      "Plata54321"
+#define WIFI_SSID          CONFIG_WIFI_SSID
+#define WIFI_PASSWORD      CONFIG_WIFI_PASSWORD
 
-#define MQTT_BROKER_URI    "mqtt://10.120.154.220:1883"
-#define MQTT_USERNAME      "sim-002"
-#define MQTT_PASSWORD      "nueva-password"
-#define UNIT_ID            "sim-002"
+#define MQTT_BROKER_URI    CONFIG_MQTT_BROKER_URI
+#define MQTT_USERNAME      CONFIG_MQTT_USERNAME
+#define MQTT_PASSWORD      CONFIG_MQTT_PASSWORD
+#define UNIT_ID            CONFIG_MQTT_USERNAME
 
 #define TOPIC_READINGS     "totem/" UNIT_ID "/readings"
 #define TOPIC_COMMANDS     "totem/" UNIT_ID "/commands"

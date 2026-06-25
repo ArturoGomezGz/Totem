@@ -54,6 +54,40 @@ Al conectarse, el ESP32 registra un mensaje LWT en el broker. Si se desconecta a
 
 El ESP32 se autentica ante Mosquitto usando su `unit_id` como client ID y su API key como contraseña. El broker valida las credenciales antes de aceptar la conexión.
 
+### Almacenamiento de credenciales — NVS (producción obligatorio)
+
+Las credenciales del dispositivo (`unit_id`, `api_key`, `MQTT_BROKER_URI`, `WIFI_SSID`, `WIFI_PASSWORD`) deben almacenarse en la partición **NVS (Non-Volatile Storage)** del flash del ESP32, no compiladas en el binario.
+
+**Por qué es obligatorio en producción:** cada unidad tiene un `unit_id` y `api_key` únicos generados por el dashboard al momento del registro. Si las credenciales van en el código compilado, habría que compilar un binario distinto por dispositivo. Con NVS se compila un único binario para todos los ESP32 y se provisionan las credenciales por separado.
+
+**Flujo de provisioning:**
+1. Admin registra la unidad en el dashboard → `POST /api/v1/units`
+2. El dashboard muestra el `unit_id` y `api_key` generados
+3. El técnico flashea el firmware (`ota_0`) + escribe las credenciales en la partición NVS
+4. En cada arranque el firmware lee credenciales de NVS antes de conectar
+
+**Cómo escribir en NVS desde el PC (al provisionar):**
+```bash
+# Generar imagen NVS con las credenciales
+python $IDF_PATH/components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py \
+    generate nvs_config.csv nvs.bin 0x5000
+
+# Flashear solo la partición NVS (sin tocar el firmware)
+idf.py -p COM4 write-flash 0x9000 nvs.bin
+```
+
+Donde `nvs_config.csv` es:
+```
+key,type,encoding,value
+wifi_ssid,data,string,NombreDeRed
+wifi_pass,data,string,Contraseña
+mqtt_uri,data,string,mqtt://192.168.1.100:1883
+unit_id,data,string,uuid-del-dispositivo
+api_key,data,string,api-key-generada
+```
+
+**Estado actual (simulador):** el simulador usa `Kconfig` (`sdkconfig`) en lugar de NVS — las credenciales se definen en `sdkconfig.defaults` y nunca tocan el código fuente. Es válido para desarrollo porque sim-001 y sim-002 tienen credenciales fijas conocidas. **No es válido para unidades de producción.**
+
 ---
 
 ## Documentos relacionados

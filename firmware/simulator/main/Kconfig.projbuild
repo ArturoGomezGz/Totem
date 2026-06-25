@@ -1,0 +1,33 @@
+menu "Simulator Configuration"
+
+    config WIFI_SSID
+        string "WiFi SSID"
+        default "IoT"
+        help
+            SSID de la red WiFi a la que se conectará el simulador.
+
+    config WIFI_PASSWORD
+        string "WiFi Password"
+        default ""
+        help
+            Contraseña de la red WiFi.
+
+    config MQTT_BROKER_URI
+        string "MQTT Broker URI"
+        default "mqtt://192.168.1.100:1883"
+        help
+            URI completa del broker Mosquitto. Ejemplo: mqtt://10.0.0.1:1883
+
+    config MQTT_USERNAME
+        string "MQTT Username (unit_id)"
+        default "sim-001"
+        help
+            Identificador único de la unidad. Debe coincidir con un registro en la DB.
+
+    config MQTT_PASSWORD
+        string "MQTT Password (api_key)"
+        default ""
+        help
+            API key de la unidad generada por el dashboard. Solo para autenticación MQTT.
+
+endmenu
