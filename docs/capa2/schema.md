@@ -82,6 +82,13 @@ Todas las columnas de sensores son nullable. `NULL` no significa fallo de lectur
 
 Clave primaria compuesta: `(unit_id, timestamp)`. Particionado automático por tiempo via TimescaleDB.
 
+**Extensión para el tanque de suministro:** cuando el tanque esté definido, sus sensores (pH, EC, temperatura del agua, nivel) se agregan como columnas adicionales a esta misma tabla. Las filas del totem tendrán esas columnas en `NULL` y viceversa. Esta decisión está respaldada por dos razones:
+
+1. **Costo de almacenamiento negligible.** La compresión columnar de TimescaleDB almacena columnas de `NULL` con costo casi cero. A cualquier escala razonable del proyecto, las columnas vacías no tienen impacto en el tamaño de la DB.
+2. **Queries simples.** El campo `units.type` (`totem` / `supply_tank`) distingue el tipo de dispositivo. Filtrar por tipo de unidad es suficiente para separar lecturas ambientales de lecturas de calidad de agua — no se necesitan joins adicionales ni tablas separadas.
+
+Las columnas del tanque **no se agregan hasta tener definidos los sensores exactos**. El `ALTER TABLE ADD COLUMN` en TimescaleDB no requiere migración compleja ni downtime.
+
 ### `device_events`
 
 Registro unificado de actuadores. Duración de ciclos de bomba se calcula como diferencia entre `pump_off` y su `pump_on` anterior.
