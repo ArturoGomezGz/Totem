@@ -1,4 +1,23 @@
 services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: totem-db
+    environment:
+      POSTGRES_DB: totem
+      POSTGRES_USER: totem
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U totem -d totem"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: totem-mosquitto
@@ -27,15 +46,23 @@ services:
     ports:
       - "8000:8000"
     environment:
+      DATABASE_URL: postgresql://totem:changeme@db:5432/totem
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
       MQTT_CLIENT_ID: totem-server
       MQTT_USERNAME: server
       MQTT_PASSWORD: changeme
+    volumes:
+      - firmware-data:/app/data/firmware
     depends_on:
-      - mosquitto
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
+  db-data:
   mosquitto-data:
   mosquitto-logs:
+  firmware-data:
