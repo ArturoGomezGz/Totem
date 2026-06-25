@@ -20,7 +20,8 @@ class MQTTClient:
 
     def connect(self) -> None:
         print(f"[mqtt] conectando a {MQTT_HOST}:{MQTT_PORT} como '{MQTT_CLIENT_ID}'")
-        self._client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+        self._client.reconnect_delay_set(min_delay=2, max_delay=30)
+        self._client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=60)
         self._client.loop_start()
 
     def disconnect(self) -> None:
