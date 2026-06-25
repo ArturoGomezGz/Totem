@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
 
 # Mosquitto — credenciales generadas localmente
 deploy/mosquitto/config/passwd
