@@ -30,6 +30,7 @@ services:
       MQTT_CLIENT_ID: totem-server
       MQTT_USERNAME: server
       MQTT_PASSWORD: changeme
+      JWT_SECRET: changeme-use-a-long-random-secret-in-production
     volumes:
       - firmware-data:/app/data/firmware
     depends_on:

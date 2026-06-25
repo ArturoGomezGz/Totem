@@ -28,7 +28,7 @@ class MqttAclPayload(BaseModel):
     acc: int
 
 
-@router.post("/api/internal/mqtt/auth")
+@router.post("/api/internal/mqtt/auth", include_in_schema=False)
 def mqtt_auth(payload: MqttAuthPayload, db: Session = Depends(get_db)):
     # El server se autentica con sus propias credenciales, no como unidad
     if payload.username == config.MQTT_USERNAME:
@@ -53,13 +53,13 @@ def mqtt_auth(payload: MqttAuthPayload, db: Session = Depends(get_db)):
     return Response(status_code=200)
 
 
-@router.post("/api/internal/mqtt/superuser")
+@router.post("/api/internal/mqtt/superuser", include_in_schema=False)
 def mqtt_superuser(payload: MqttSuperuserPayload):
     # Ningún cliente es superusuario — todos están sujetos a ACL
     return Response(status_code=401)
 
 
-@router.post("/api/internal/mqtt/acl")
+@router.post("/api/internal/mqtt/acl", include_in_schema=False)
 def mqtt_acl(payload: MqttAclPayload):
     # Sin restricciones de topics en el MVP — cualquier cliente autenticado
     # puede publicar y suscribirse a cualquier topic
