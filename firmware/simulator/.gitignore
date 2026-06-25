@@ -2,3 +2,5 @@ build/
 sdkconfig
 sdkconfig.old
 sdkconfig.defaults
+nvs_config.csv
+nvs.bin
