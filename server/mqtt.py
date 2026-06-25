@@ -1,7 +1,12 @@
 import json
+import uuid
+from datetime import datetime, timezone
+
 import paho.mqtt.client as mqtt
 
 from config import MQTT_HOST, MQTT_PORT, MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD
+from db import SessionLocal
+from models import Reading
 
 SUBSCRIPTIONS = [
     "totem/+/readings",
@@ -59,8 +64,27 @@ class MQTTClient:
         unit_id, kind = parts[1], parts[2]
         if kind == "readings":
             state.update_readings(unit_id, payload)
+            self._persist_reading(unit_id, payload)
         elif kind == "events" and "action" in payload:
             state.update_pump(unit_id, payload["action"])
+
+    def _persist_reading(self, unit_id_str: str, payload: dict) -> None:
+        db = SessionLocal()
+        try:
+            db.add(Reading(
+                unit_id=uuid.UUID(unit_id_str),
+                timestamp=datetime.now(timezone.utc),
+                temperature=payload.get("temperature"),
+                humidity=payload.get("humidity"),
+                light=payload.get("light"),
+                co2=payload.get("co2"),
+            ))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[mqtt] error persistiendo lectura: {e}")
+        finally:
+            db.close()
 
 
 mqtt_client = MQTTClient()
