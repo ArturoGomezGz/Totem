@@ -40,7 +40,9 @@ Almacena lecturas y eventos en flash cuando no hay WiFi. Al reconectar y reestab
 
 El ESP32 recibe la notificación de nueva versión via topic MQTT (`totem/{unit_id}/ota`). La descarga del binario se hace via HTTP — MQTT no es adecuado para payloads grandes.
 
-🔴 Pendiente: verificación de firma criptográfica del binario (además del hash).
+**Verificación de integridad:** hash SHA-256 del binario incluido en la notificación MQTT. El ESP32 verifica el hash antes de aplicar la actualización.
+
+**Firma criptográfica:** diferida para post-MVP. El hash es suficiente para las primeras unidades en campo — la firma agrega valor cuando el sistema escala a instalaciones no supervisadas o infraestructura compartida.
 
 ### Last Will and Testament (LWT)
 
