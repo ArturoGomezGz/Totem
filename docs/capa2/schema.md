@@ -50,7 +50,8 @@ Tabla base genérica para cualquier tipo de unidad del sistema. Campos específi
 | `organization_id` | UUID FK → organizations | |
 | `type` | VARCHAR NOT NULL | `totem`, `supply_tank` |
 | `name` | VARCHAR NOT NULL | Nombre legible asignado por el usuario |
-| `api_key` | VARCHAR UNIQUE NOT NULL | Autenticación del dispositivo ante el broker MQTT |
+| `api_key` | VARCHAR UNIQUE NOT NULL | Contraseña MQTT del dispositivo — no es un token de API REST |
+| `is_active` | BOOLEAN NOT NULL DEFAULT true | False = unidad revocada, Mosquitto rechaza la conexión |
 | `firmware_version` | VARCHAR | Última versión reportada por el dispositivo |
 | `last_seen` | TIMESTAMPTZ | Último ciclo de comunicación exitoso |
 | `created_at` | TIMESTAMPTZ NOT NULL | |

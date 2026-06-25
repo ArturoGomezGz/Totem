@@ -78,6 +78,8 @@ SQLAlchemy soporta async de forma nativa — la migración es quirúrgica, no un
 
 **Rol en el sistema:** punto de entrada de todos los dispositivos ESP32. FastAPI se suscribe a los topics de lecturas, eventos y alertas para persistirlos; publica a los topics de comandos, perfiles y OTA para controlar dispositivos.
 
+**Autenticación dinámica:** Mosquitto delega la validación de credenciales a FastAPI via el plugin `mosquitto-go-auth` con backend HTTP. Cuando un dispositivo intenta conectar, Mosquitto llama a un endpoint interno de FastAPI que consulta la base de datos y responde si las credenciales son válidas. La DB es la única fuente de verdad — dar de alta o revocar una unidad es una operación en la DB, sin tocar archivos ni reiniciar Mosquitto. Ver flujo completo en `docs/capa2/api-contract.md`.
+
 **Pendiente de decidir dentro del stack Mosquitto:** configuración de sesiones persistentes (clean session vs. persistent session) — afecta el comportamiento del buffer offline al reconectar.
 
 ---

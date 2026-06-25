@@ -14,9 +14,9 @@
 #define WIFI_PASSWORD      "Plata54321"
 
 #define MQTT_BROKER_URI    "mqtt://10.120.154.220:1883"
-#define MQTT_USERNAME      "sim-001"
+#define MQTT_USERNAME      "sim-002"
 #define MQTT_PASSWORD      "nueva-password"
-#define UNIT_ID            "sim-001"
+#define UNIT_ID            "sim-002"
 
 #define TOPIC_READINGS     "totem/" UNIT_ID "/readings"
 #define TOPIC_COMMANDS     "totem/" UNIT_ID "/commands"

@@ -64,9 +64,32 @@ Todos los endpoints usan el prefijo `/api/v1/`. Ver decisión y justificación d
 Cada dispositivo se autentica ante Mosquitto con:
 - **Client ID:** `unit_id` de la unidad
 - **Username:** `unit_id`
-- **Password:** API key de la unidad (almacenada en flash del ESP32)
+- **Password:** `api_key` de la unidad (almacenada en flash del ESP32)
 
-El broker rechaza la conexión si las credenciales son inválidas o están revocadas.
+La `api_key` es exclusivamente para autenticación MQTT — no es un token de la API REST. El ESP32 nunca habla con FastAPI directamente.
+
+**Validación dinámica via `mosquitto-go-auth`:** en cada intento de conexión, Mosquitto llama al siguiente endpoint interno de FastAPI:
+
+| Método | Endpoint | Descripción |
+|---|---|---|
+| `POST` | `/api/internal/mqtt/auth` | Mosquitto valida credenciales de un dispositivo |
+
+Payload que envía Mosquitto:
+```json
+{ "username": "sim-001", "password": "api_key_value", "clientid": "sim-001" }
+```
+
+FastAPI consulta la DB: si existe una unidad activa con ese `unit_id` y `api_key`, responde `200 OK`. Cualquier otro código rechaza la conexión.
+
+Este endpoint no es accesible desde el dashboard ni desde los dispositivos — solo desde el broker dentro de la red Docker.
+
+**Flujo de alta de un dispositivo:**
+1. Admin crea la unidad desde el dashboard → `POST /api/v1/units`
+2. FastAPI genera `unit_id` (UUID) y `api_key` (token aleatorio seguro) y los persiste en DB
+3. El dashboard muestra las credenciales al admin para que las flashee en el ESP32
+4. El ESP32 intenta conectar → Mosquitto valida contra FastAPI → conexión aceptada
+
+**Revocación:** marcar la unidad como inactiva en DB. En la siguiente reconexión del ESP32, FastAPI responde con error y Mosquitto rechaza la conexión — sin reiniciar ningún servicio.
 
 ### Dashboard → API HTTP
 
