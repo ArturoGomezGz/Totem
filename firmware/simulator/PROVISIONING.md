@@ -75,10 +75,12 @@ Si funcionó correctamente aparece el archivo `nvs.bin` en tu directorio actual.
 La dirección `0x9000` es donde vive la partición NVS en el ESP32 (definida en `partitions.csv`). Este comando escribe **solo** esa partición — el firmware que ya está en el ESP32 no se toca.
 
 ```bash
-idf.py -C firmware/simulator -p COM4 write-flash 0x9000 nvs.bin
+esptool.py -p COM4 write_flash 0x9000 nvs.bin
 ```
 
 Reemplaza `COM4` con el puerto de tu dispositivo.
+
+> **Nota:** usa `esptool.py` (no `idf.py`) para este paso. El subcomando es `write_flash` con guion bajo.
 
 Verás algo como:
 ```
@@ -138,7 +140,9 @@ docker exec -it totem-mosquitto mosquitto_sub -t "totem/#" -u server -P changeme
 
 El binario compilado es el mismo para todos los dispositivos. Para sim-002:
 
-1. Edita `nvs_config.csv` con las credenciales de sim-002
+1. Edita `nvs_config.csv` con las credenciales de sim-002:
+   - `unit_id`: `00000000-0000-0000-0000-000000000101`
+   - `api_key`: `sim-002-api-key-dev-only-replace-in-production`
 2. Genera el binario NVS (paso 3)
-3. Flashea NVS en el segundo ESP32 (paso 4)
+3. Flashea NVS en el segundo ESP32: `esptool.py -p COM5 write_flash 0x9000 nvs.bin`
 4. Flashea el firmware: `idf.py -C firmware/simulator -p COM5 flash monitor` (ajusta el puerto)
