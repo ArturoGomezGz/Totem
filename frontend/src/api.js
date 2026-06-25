@@ -53,4 +53,17 @@ export const api = {
   getUnitState:     (unit_id)            => request('GET',  `/units/${unit_id}/state`),
 
   sendCommand:      (unit_id, type)      => request('POST', `/units/${unit_id}/commands`, { type }),
+
+  getReadings: (unit_id, params = {}) => {
+    const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)))
+    return request('GET', `/units/${unit_id}/readings?${q}`)
+  },
+  getEvents: (unit_id, params = {}) => {
+    const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)))
+    return request('GET', `/units/${unit_id}/events?${q}`)
+  },
+  getAlerts: (params = {}) => {
+    const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)))
+    return request('GET', `/alerts?${q}`)
+  },
 }
