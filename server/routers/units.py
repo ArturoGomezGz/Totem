@@ -156,10 +156,17 @@ Vista de detalle de unidad — panel de estado en tiempo real.
     response_model=UnitStateOut,
     response_description="Último estado conocido de la unidad",
     responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "La unidad no pertenece a una organización del usuario"},
         404: {"description": "Unidad sin datos recibidos aún (el dispositivo no ha publicado)"},
     },
 )
-def get_unit_state(unit_id: str):
+def get_unit_state(
+    unit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_unit_access(unit_id, current_user, db)
     data = state.get_unit(unit_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Unidad no encontrada o sin datos aun")
