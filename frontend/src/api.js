@@ -72,6 +72,10 @@ export const api = {
   },
   resolveAlert: (alert_id) => request('POST', `/alerts/${alert_id}/resolve`),
 
+  getTelegramStatus:    ()        => request('GET',    '/telegram/status'),
+  getTelegramLinkToken: ()        => request('POST',   '/telegram/link-token'),
+  deleteTelegramLink:   ()        => request('DELETE', '/telegram/link'),
+
   getProfiles:   (organization_id)          => request('GET',    `/profiles?organization_id=${organization_id}`),
   createProfile: (body)                     => request('POST',   '/profiles', body),
   updateProfile: (id, body)                 => request('PUT',    `/profiles/${id}`, body),

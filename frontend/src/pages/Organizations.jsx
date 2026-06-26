@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, clearTokens } from '../api'
 import { s } from './styles'
+import TelegramLink from '../components/TelegramLink'
 
 export default function Organizations() {
   const navigate = useNavigate()
@@ -84,6 +85,8 @@ export default function Organizations() {
             {loading ? 'Creando...' : 'Crear'}
           </button>
         </form>
+
+        <TelegramLink />
       </div>
     </div>
   )
