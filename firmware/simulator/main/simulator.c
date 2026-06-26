@@ -398,7 +398,7 @@ static void mqtt_init(void)
 
 static void publish_readings_task(void *pvParameters)
 {
-    float temperature = 22.0f;
+    float temperature = 25.0f;
     float humidity    = 65.0f;
     float light       = 300.0f;
 
