@@ -35,6 +35,7 @@ def _retry_pending_alerts() -> None:
 async def lifespan(app: FastAPI):
     mqtt_client.connect()
     _retry_pending_alerts()
+    send_message("🟢 <b>Totem Server iniciado</b>")
     yield
     mqtt_client.disconnect()
 
