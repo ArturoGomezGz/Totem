@@ -91,6 +91,49 @@ def _require_unit_access(unit_id: str, current_user: User, db: Session) -> Unit:
 # ---------- Endpoints ----------
 
 @router.get(
+    "/units/{unit_id}",
+    summary="Obtener metadata de una unidad",
+    description="""
+**¿Qué hace?**
+Devuelve la metadata persistida en base de datos de una unidad: identificadores,
+tipo, nombre, estado de activación, versión de firmware, última vez vista y fecha
+de creación. No incluye lecturas de sensores ni estado en tiempo real.
+
+**¿Para qué?**
+Permite al frontend mostrar la ficha de una unidad específica con sus datos de
+configuración e identidad. A diferencia de `/units/{unit_id}/state`, este endpoint
+consulta la DB y no depende de que el dispositivo haya publicado datos recientes.
+
+**¿Dónde se usa?**
+Vista de detalle de unidad — encabezado con información del dispositivo.
+""",
+    response_model=UnitOut,
+    tags=["units"],
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "La unidad no pertenece a una organización del usuario"},
+        404: {"description": "Unidad no encontrada"},
+    },
+)
+def get_unit(
+    unit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    unit = _require_unit_access(unit_id, current_user, db)
+    return UnitOut(
+        id=str(unit.id),
+        organization_id=str(unit.organization_id),
+        type=unit.type,
+        name=unit.name,
+        is_active=unit.is_active,
+        firmware_version=unit.firmware_version,
+        last_seen=unit.last_seen,
+        created_at=unit.created_at,
+    )
+
+
+@router.get(
     "/units/{unit_id}/state",
     summary="Obtener estado en tiempo real de una unidad",
     description="""

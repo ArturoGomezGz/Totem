@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 import auth as auth_utils
+from auth import get_current_user
 from db import get_db
 from models import RefreshToken, User
 
@@ -151,3 +152,48 @@ def refresh(body: RefreshIn, db: Session = Depends(get_db)):
 
     access_token = auth_utils.create_access_token(str(stored.user_id))
     return AccessTokenOut(access_token=access_token, token_type="bearer")
+
+
+class LogoutIn(BaseModel):
+    refresh_token: str
+
+
+class MessageOut(BaseModel):
+    detail: str
+
+
+@router.post(
+    "/auth/logout",
+    summary="Cerrar sesión y revocar el refresh token",
+    description="""
+**¿Qué hace?**
+Marca el refresh token enviado como revocado en la base de datos, impidiendo que pueda
+usarse para emitir nuevos access tokens. Si el token no existe o ya está revocado,
+igual devuelve 200 para no revelar información.
+
+**¿Para qué?**
+Implementa un logout seguro del lado del servidor. Sin este paso, el refresh token
+seguiría siendo válido hasta su vencimiento (30 días) aunque el usuario haya cerrado sesión.
+
+**¿Dónde se usa?**
+Acción de "Cerrar sesión" en cualquier pantalla de la aplicación.
+""",
+    tags=["auth"],
+    response_model=MessageOut,
+    responses={
+        401: {"description": "Access token ausente, inválido o expirado"},
+    },
+)
+def logout(
+    body: LogoutIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    token_hash = hashlib.sha256(body.refresh_token.encode()).hexdigest()
+    stored = db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).first()
+
+    if stored and stored.revoked_at is None:
+        stored.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+
+    return {"detail": "Sesión cerrada"}
