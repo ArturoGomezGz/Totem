@@ -48,6 +48,7 @@ static char api_key[128];
 static char topic_readings[96];
 static char topic_commands[96];
 static char topic_alerts[96];
+static char topic_events[96];
 static char topic_ota[96];
 static char topic_profile[96];
 
@@ -78,6 +79,7 @@ static void load_config_from_nvs(void)
     snprintf(topic_readings, sizeof(topic_readings), "totem/%s/readings", unit_id);
     snprintf(topic_commands, sizeof(topic_commands), "totem/%s/commands", unit_id);
     snprintf(topic_alerts,   sizeof(topic_alerts),   "totem/%s/alerts",   unit_id);
+    snprintf(topic_events,   sizeof(topic_events),   "totem/%s/events",   unit_id);
     snprintf(topic_ota,      sizeof(topic_ota),      "totem/%s/ota",      unit_id);
     snprintf(topic_profile,  sizeof(topic_profile),  "totem/%s/profile",  unit_id);
 
@@ -338,14 +340,25 @@ static void handle_command(const char *data, int data_len)
 
     cJSON *type = cJSON_GetObjectItem(json, "type");
     if (cJSON_IsString(type)) {
+        const char *action = NULL;
+
         if (strcmp(type->valuestring, "pump_on") == 0) {
             pump_on = true;
+            action  = "pump_on";
             ESP_LOGI(TAG, "Bomba: ENCENDIDA — temperatura comenzará a bajar");
         } else if (strcmp(type->valuestring, "pump_off") == 0) {
             pump_on = false;
+            action  = "pump_off";
             ESP_LOGI(TAG, "Bomba: APAGADA — temperatura comenzará a subir");
         } else {
             ESP_LOGW(TAG, "Comando desconocido: %s", type->valuestring);
+        }
+
+        // Notificar al servidor el cambio de estado de la bomba
+        if (action) {
+            char event_payload[64];
+            snprintf(event_payload, sizeof(event_payload), "{\"action\":\"%s\"}", action);
+            esp_mqtt_client_publish(mqtt_client, topic_events, event_payload, 0, 1, 0);
         }
     }
 

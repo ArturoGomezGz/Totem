@@ -69,12 +69,16 @@ export default function UnitDetail() {
 
   const togglePump = async () => {
     if (cmdLoading || !unit) return
+    const wasOn = unit.pump_on
+    const type  = wasOn ? 'pump_off' : 'pump_on'
+    // Flip inmediato para que el botón responda sin esperar al servidor
+    setUnit(prev => prev ? { ...prev, pump_on: !wasOn } : prev)
     setCmdLoading(true)
-    const type = unit.pump_on ? 'pump_off' : 'pump_on'
     try {
       await api.sendCommand(unitId, type)
-      await fetchState()
     } catch {
+      // Revertir si falla
+      setUnit(prev => prev ? { ...prev, pump_on: wasOn } : prev)
       setError('Error al enviar comando')
     } finally {
       setCmdLoading(false)
