@@ -3,9 +3,9 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: totem-db
     environment:
-      POSTGRES_DB: totem
-      POSTGRES_USER: totem
-      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -13,7 +13,7 @@ services:
       - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U totem -d totem"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -24,14 +24,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://totem:changeme@db:5432/totem
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       MQTT_HOST: mosquitto
       MQTT_PORT: 1883
-      MQTT_CLIENT_ID: totem-server
-      MQTT_USERNAME: server
-      MQTT_PASSWORD: changeme
-      JWT_SECRET: changeme-use-a-long-random-secret-in-production
-      SERVER_URL: http://10.120.154.220:8000
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID}
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      SERVER_URL: ${SERVER_URL}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
     volumes:
