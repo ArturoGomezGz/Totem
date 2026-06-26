@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -64,7 +64,6 @@ def list_alerts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Subquery: IDs de unidades accesibles para este usuario
     accessible_unit_ids = (
         db.query(Unit.id)
         .join(Membership, Unit.organization_id == Membership.organization_id)
@@ -96,3 +95,61 @@ def list_alerts(
         )
         for a in alerts
     ]
+
+
+@router.post(
+    "/alerts/{alert_id}/resolve",
+    summary="Resolver una alerta manualmente",
+    description="""
+**¿Qué hace?**
+Marca la alerta indicada como resuelta, registrando la fecha y hora actual en `resolved_at`.
+Si la alerta ya estaba resuelta, devuelve 200 sin modificarla.
+
+**¿Para qué?**
+Permite al operador cerrar alertas desde el dashboard sin esperar a que el dispositivo
+las resuelva automáticamente — útil para alertas de sensores corregidas manualmente
+o incidentes ya atendidos.
+
+**¿Dónde se usa?**
+Panel de alertas en la vista de detalle de unidad — botón "Resolver".
+""",
+    response_model=AlertOut,
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "La alerta no pertenece a una organización del usuario"},
+        404: {"description": "Alerta no encontrada"},
+    },
+)
+def resolve_alert(
+    alert_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alerta no encontrada")
+
+    # Verificar que la unidad de la alerta pertenece a una org del usuario
+    accessible = (
+        db.query(Unit.id)
+        .join(Membership, Unit.organization_id == Membership.organization_id)
+        .filter(Membership.user_id == current_user.id, Unit.id == alert.unit_id)
+        .first()
+    )
+    if not accessible:
+        raise HTTPException(status_code=403, detail="No tienes acceso a esta alerta")
+
+    if alert.resolved_at is None:
+        alert.resolved_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(alert)
+
+    return AlertOut(
+        id=str(alert.id),
+        unit_id=str(alert.unit_id),
+        timestamp=alert.timestamp,
+        type=alert.type,
+        severity=alert.severity,
+        message=alert.message,
+        resolved_at=alert.resolved_at,
+    )

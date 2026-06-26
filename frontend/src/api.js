@@ -52,6 +52,8 @@ export const api = {
   getUnits:         (organization_id)    => request('GET',  `/units?organization_id=${organization_id}`),
   createUnit:       (body)               => request('POST', '/units', body),
   getUnit:          (unit_id)            => request('GET',  `/units/${unit_id}`),
+  patchUnit:        (unit_id, body)      => request('PATCH', `/units/${unit_id}`, body),
+  deactivateUnit:   (unit_id)            => request('DELETE', `/units/${unit_id}`),
   getUnitState:     (unit_id)            => request('GET',  `/units/${unit_id}/state`),
 
   sendCommand:      (unit_id, type)      => request('POST', `/units/${unit_id}/commands`, { type }),
@@ -68,6 +70,7 @@ export const api = {
     const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)))
     return request('GET', `/alerts?${q}`)
   },
+  resolveAlert: (alert_id) => request('POST', `/alerts/${alert_id}/resolve`),
 
   getProfiles:   (organization_id)          => request('GET',    `/profiles?organization_id=${organization_id}`),
   createProfile: (body)                     => request('POST',   '/profiles', body),

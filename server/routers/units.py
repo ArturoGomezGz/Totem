@@ -47,12 +47,17 @@ class UnitOut(BaseModel):
     firmware_version: Optional[str] = None
     last_seen: Optional[datetime] = None
     created_at: datetime
+    active_profile_id: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
 class UnitCreatedOut(UnitOut):
     api_key: str
+
+
+class UnitPatchIn(BaseModel):
+    name: str
 
 
 class ReadingOut(BaseModel):
@@ -74,7 +79,28 @@ class DeviceEventOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------- Helper ----------
+# ---------- Helpers ----------
+
+def _active_profile_id(unit: Unit, db: Session) -> Optional[str]:
+    if unit.type != "totem":
+        return None
+    config = db.query(TotemConfig).filter(TotemConfig.unit_id == unit.id).first()
+    return str(config.active_profile_id) if config and config.active_profile_id else None
+
+
+def _unit_to_out(unit: Unit, db: Session) -> UnitOut:
+    return UnitOut(
+        id=str(unit.id),
+        organization_id=str(unit.organization_id),
+        type=unit.type,
+        name=unit.name,
+        is_active=unit.is_active,
+        firmware_version=unit.firmware_version,
+        last_seen=unit.last_seen,
+        created_at=unit.created_at,
+        active_profile_id=_active_profile_id(unit, db),
+    )
+
 
 def _require_unit_access(unit_id: str, current_user: User, db: Session) -> Unit:
     unit = db.query(Unit).filter(Unit.id == unit_id).first()
@@ -122,16 +148,7 @@ def get_unit(
     current_user: User = Depends(get_current_user),
 ):
     unit = _require_unit_access(unit_id, current_user, db)
-    return UnitOut(
-        id=str(unit.id),
-        organization_id=str(unit.organization_id),
-        type=unit.type,
-        name=unit.name,
-        is_active=unit.is_active,
-        firmware_version=unit.firmware_version,
-        last_seen=unit.last_seen,
-        created_at=unit.created_at,
-    )
+    return _unit_to_out(unit, db)
 
 
 @router.get(
@@ -212,19 +229,7 @@ def list_units(
         raise HTTPException(status_code=403, detail="No perteneces a esta organización")
 
     units = db.query(Unit).filter(Unit.organization_id == organization_id).all()
-    return [
-        UnitOut(
-            id=str(u.id),
-            organization_id=str(u.organization_id),
-            type=u.type,
-            name=u.name,
-            is_active=u.is_active,
-            firmware_version=u.firmware_version,
-            last_seen=u.last_seen,
-            created_at=u.created_at,
-        )
-        for u in units
-    ]
+    return [_unit_to_out(u, db) for u in units]
 
 
 @router.post(
@@ -298,6 +303,91 @@ def create_unit(
         created_at=unit.created_at,
         api_key=api_key,
     )
+
+
+@router.patch(
+    "/units/{unit_id}",
+    summary="Actualizar nombre de una unidad",
+    description="""
+**¿Qué hace?**
+Modifica el nombre de la unidad indicada.
+
+**¿Para qué?**
+Permite al administrador corregir o personalizar el nombre de un dispositivo
+sin darlo de baja ni alterar su configuración.
+
+**¿Dónde se usa?**
+Pantalla de gestión de unidades — acción de edición inline.
+""",
+    response_model=UnitOut,
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "Solo los administradores pueden editar unidades"},
+        404: {"description": "Unidad no encontrada"},
+    },
+    tags=["units"],
+)
+def patch_unit(
+    unit_id: str,
+    body: UnitPatchIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    unit = _require_unit_access(unit_id, current_user, db)
+
+    membership = db.query(Membership).filter(
+        Membership.user_id == current_user.id,
+        Membership.organization_id == unit.organization_id,
+    ).first()
+    if not membership or membership.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo los administradores pueden editar unidades")
+
+    unit.name = body.name
+    db.commit()
+    db.refresh(unit)
+    return _unit_to_out(unit, db)
+
+
+@router.delete(
+    "/units/{unit_id}",
+    summary="Desactivar una unidad (soft delete)",
+    description="""
+**¿Qué hace?**
+Marca la unidad como inactiva (`is_active = false`). No elimina el registro ni
+su historial de lecturas, eventos y alertas.
+
+**¿Para qué?**
+Revoca el acceso MQTT del dispositivo: en la próxima reconexión Mosquitto rechazará
+la autenticación. El historial se preserva para consulta futura.
+Para reactivar la unidad se requiere acceso directo a la base de datos.
+
+**¿Dónde se usa?**
+Pantalla de gestión de unidades — acción "Dar de baja".
+""",
+    status_code=204,
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "Solo los administradores pueden desactivar unidades"},
+        404: {"description": "Unidad no encontrada"},
+    },
+    tags=["units"],
+)
+def deactivate_unit(
+    unit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    unit = _require_unit_access(unit_id, current_user, db)
+
+    membership = db.query(Membership).filter(
+        Membership.user_id == current_user.id,
+        Membership.organization_id == unit.organization_id,
+    ).first()
+    if not membership or membership.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo los administradores pueden desactivar unidades")
+
+    unit.is_active = False
+    db.commit()
 
 
 @router.get(

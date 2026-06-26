@@ -41,7 +41,10 @@ export default function UnitDetail() {
   }, [fetchState])
 
   useEffect(() => {
-    api.getUnit(unitId).then(setUnitMeta).catch(() => {})
+    api.getUnit(unitId).then(meta => {
+      setUnitMeta(meta)
+      if (meta?.active_profile_id) setSelectedProfileId(meta.active_profile_id)
+    }).catch(() => {})
   }, [unitId])
 
   useEffect(() => {
