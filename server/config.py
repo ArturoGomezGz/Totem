@@ -18,3 +18,6 @@ REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
 
 FIRMWARE_DIR = os.getenv("FIRMWARE_DIR", "/app/data/firmware")
 SERVER_URL = os.getenv("SERVER_URL", "http://localhost")
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")

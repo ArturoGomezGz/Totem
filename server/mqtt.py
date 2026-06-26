@@ -6,7 +6,7 @@ import paho.mqtt.client as mqtt
 
 from config import MQTT_HOST, MQTT_PORT, MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD
 from db import SessionLocal
-from models import Reading
+from models import Alert, DeviceEvent, Reading, Unit
 
 SUBSCRIPTIONS = [
     "totem/+/readings",
@@ -67,6 +67,8 @@ class MQTTClient:
             self._persist_reading(unit_id, payload)
         elif kind == "events" and "action" in payload:
             state.update_pump(unit_id, payload["action"])
+        elif kind == "alerts":
+            self._persist_alert(unit_id, payload)
 
     def _persist_reading(self, unit_id_str: str, payload: dict) -> None:
         db = SessionLocal()
@@ -83,6 +85,40 @@ class MQTTClient:
         except Exception as e:
             db.rollback()
             print(f"[mqtt] error persistiendo lectura: {e}")
+        finally:
+            db.close()
+
+    def _persist_alert(self, unit_id_str: str, payload: dict) -> None:
+        from telegram import notify_alert
+
+        alert_type = payload.get("type", "unknown")
+        severity   = payload.get("severity", "warning")
+        message    = payload.get("message")
+
+        db = SessionLocal()
+        try:
+            unit = db.query(Unit).filter(Unit.id == unit_id_str).first()
+            unit_name = unit.name if unit else unit_id_str
+
+            alert = Alert(
+                unit_id=uuid.UUID(unit_id_str),
+                timestamp=datetime.now(timezone.utc),
+                type=alert_type,
+                severity=severity,
+                message=message,
+            )
+            db.add(alert)
+            db.flush()
+
+            sent = notify_alert(unit_name, alert_type, severity, message)
+            if sent:
+                alert.telegram_sent_at = datetime.now(timezone.utc)
+
+            db.commit()
+            print(f"[mqtt] alerta persistida — telegram={'ok' if sent else 'pendiente'}")
+        except Exception as e:
+            db.rollback()
+            print(f"[mqtt] error persistiendo alerta: {e}")
         finally:
             db.close()
 
