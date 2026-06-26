@@ -15,3 +15,6 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+
+FIRMWARE_DIR = os.getenv("FIRMWARE_DIR", "/app/data/firmware")
+SERVER_URL = os.getenv("SERVER_URL", "http://localhost")

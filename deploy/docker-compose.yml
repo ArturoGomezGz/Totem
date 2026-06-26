@@ -31,6 +31,7 @@ services:
       MQTT_USERNAME: server
       MQTT_PASSWORD: changeme
       JWT_SECRET: changeme-use-a-long-random-secret-in-production
+      SERVER_URL: http://localhost
     volumes:
       - firmware-data:/app/data/firmware
     depends_on:
