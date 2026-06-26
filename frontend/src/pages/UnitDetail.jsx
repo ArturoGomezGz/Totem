@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { s } from './styles'
@@ -6,7 +6,8 @@ import ReadingsChart from '../components/ReadingsChart'
 import EventsList from '../components/EventsList'
 import AlertsList from '../components/AlertsList'
 
-const POLL_MS = 5000
+const POLL_MS    = 5000
+const CMD_LOCK_MS = 15000  // ms que el polling no puede sobrescribir pump_on tras un comando
 const TABS = ['En vivo', 'Lecturas', 'Eventos', 'Alertas']
 
 export default function UnitDetail() {
@@ -18,6 +19,7 @@ export default function UnitDetail() {
   const [error, setError]           = useState(null)
   const [cmdLoading, setCmdLoading] = useState(false)
   const [tab, setTab]               = useState('En vivo')
+  const cmdSentAt = useRef(null)  // timestamp del último comando enviado
 
   const [profiles, setProfiles]         = useState([])
   const [selectedProfileId, setSelectedProfileId] = useState('')
@@ -27,7 +29,14 @@ export default function UnitDetail() {
 
   const fetchState = useCallback(async () => {
     try {
-      setUnit(await api.getUnitState(unitId))
+      const fresh = await api.getUnitState(unitId)
+      setUnit(prev => {
+        // Si se envió un comando recientemente, preservar el pump_on local
+        // para no revertir el estado optimista antes de que el servidor lo confirme
+        const locked = cmdSentAt.current && (Date.now() - cmdSentAt.current) < CMD_LOCK_MS
+        if (locked && prev) return { ...fresh, pump_on: prev.pump_on }
+        return fresh
+      })
       setError(null)
     } catch {
       setError('Sin datos del dispositivo')
@@ -71,14 +80,16 @@ export default function UnitDetail() {
     if (cmdLoading || !unit) return
     const wasOn = unit.pump_on
     const type  = wasOn ? 'pump_off' : 'pump_on'
-    // Flip inmediato para que el botón responda sin esperar al servidor
+    // Flip optimista inmediato + bloquear polling por CMD_LOCK_MS
     setUnit(prev => prev ? { ...prev, pump_on: !wasOn } : prev)
+    cmdSentAt.current = Date.now()
     setCmdLoading(true)
     try {
       await api.sendCommand(unitId, type)
     } catch {
-      // Revertir si falla
+      // Revertir si el comando falló
       setUnit(prev => prev ? { ...prev, pump_on: wasOn } : prev)
+      cmdSentAt.current = null
       setError('Error al enviar comando')
     } finally {
       setCmdLoading(false)
