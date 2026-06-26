@@ -22,11 +22,20 @@
 
 #define OTA_BUF_SIZE       4096
 
+// Parámetros del modelo de temperatura
+#define TEMP_BASE       20.0f   // temperatura inicial
+#define TEMP_ALERT      28.0f   // umbral que dispara alerta
+#define TEMP_MAX        31.0f   // techo absoluto (ALERT + 3)
+#define TEMP_SAFE       22.0f   // por debajo de aquí la bomba puede apagarse
+#define TEMP_RISE_RATE   0.3f   // °C por ciclo con bomba apagada
+#define TEMP_DROP_RATE   0.5f   // °C por ciclo con bomba encendida
+
 static const char *TAG = "simulator";
 static EventGroupHandle_t wifi_events;
 static int retry_count = 0;
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 static bool ota_in_progress = false;
+static volatile bool pump_on = false;
 
 // Credenciales cargadas desde NVS al arrancar
 static char wifi_ssid[64];
@@ -38,6 +47,7 @@ static char api_key[128];
 // Topics MQTT — construidos después de cargar unit_id desde NVS
 static char topic_readings[96];
 static char topic_commands[96];
+static char topic_alerts[96];
 static char topic_ota[96];
 static char topic_profile[96];
 
@@ -57,25 +67,17 @@ static void load_config_from_nvs(void)
 
     size_t len;
 
-    len = sizeof(wifi_ssid);
-    ESP_ERROR_CHECK(nvs_get_str(nvs, "wifi_ssid", wifi_ssid, &len));
-
-    len = sizeof(wifi_pass);
-    ESP_ERROR_CHECK(nvs_get_str(nvs, "wifi_pass", wifi_pass, &len));
-
-    len = sizeof(mqtt_uri);
-    ESP_ERROR_CHECK(nvs_get_str(nvs, "mqtt_uri", mqtt_uri, &len));
-
-    len = sizeof(unit_id);
-    ESP_ERROR_CHECK(nvs_get_str(nvs, "unit_id", unit_id, &len));
-
-    len = sizeof(api_key);
-    ESP_ERROR_CHECK(nvs_get_str(nvs, "api_key", api_key, &len));
+    len = sizeof(wifi_ssid);  ESP_ERROR_CHECK(nvs_get_str(nvs, "wifi_ssid", wifi_ssid, &len));
+    len = sizeof(wifi_pass);  ESP_ERROR_CHECK(nvs_get_str(nvs, "wifi_pass", wifi_pass, &len));
+    len = sizeof(mqtt_uri);   ESP_ERROR_CHECK(nvs_get_str(nvs, "mqtt_uri",  mqtt_uri,  &len));
+    len = sizeof(unit_id);    ESP_ERROR_CHECK(nvs_get_str(nvs, "unit_id",   unit_id,   &len));
+    len = sizeof(api_key);    ESP_ERROR_CHECK(nvs_get_str(nvs, "api_key",   api_key,   &len));
 
     nvs_close(nvs);
 
     snprintf(topic_readings, sizeof(topic_readings), "totem/%s/readings", unit_id);
     snprintf(topic_commands, sizeof(topic_commands), "totem/%s/commands", unit_id);
+    snprintf(topic_alerts,   sizeof(topic_alerts),   "totem/%s/alerts",   unit_id);
     snprintf(topic_ota,      sizeof(topic_ota),      "totem/%s/ota",      unit_id);
     snprintf(topic_profile,  sizeof(topic_profile),  "totem/%s/profile",  unit_id);
 
@@ -128,7 +130,8 @@ static void wifi_init(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    EventBits_t bits = xEventGroupWaitBits(wifi_events, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    EventBits_t bits = xEventGroupWaitBits(wifi_events,
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
 
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "WiFi conectado");
@@ -155,7 +158,6 @@ static void ota_task(void *pvParameters)
     ESP_LOGI(TAG, "OTA: iniciando actualización a versión %s", params->version);
     ESP_LOGI(TAG, "OTA: URL: %s", params->url);
 
-    // Partición destino
     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
     if (!update_partition) {
         ESP_LOGE(TAG, "OTA: no hay partición disponible");
@@ -163,13 +165,11 @@ static void ota_task(void *pvParameters)
     }
     ESP_LOGI(TAG, "OTA: escribiendo en partición %s", update_partition->label);
 
-    // Iniciar SHA-256
     mbedtls_md_context_t sha256_ctx;
     mbedtls_md_init(&sha256_ctx);
     mbedtls_md_setup(&sha256_ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 0);
     mbedtls_md_starts(&sha256_ctx);
 
-    // Iniciar escritura OTA
     esp_ota_handle_t ota_handle = 0;
     err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &ota_handle);
     if (err != ESP_OK) {
@@ -178,7 +178,6 @@ static void ota_task(void *pvParameters)
         goto ota_fail;
     }
 
-    // Descarga HTTP
     esp_http_client_config_t http_cfg = {
         .url        = params->url,
         .timeout_ms = 30000,
@@ -238,7 +237,6 @@ static void ota_task(void *pvParameters)
     free(buf);
     esp_http_client_cleanup(client);
 
-    // Verificar SHA-256
     uint8_t sha256_result[32];
     mbedtls_md_finish(&sha256_ctx, sha256_result);
     mbedtls_md_free(&sha256_ctx);
@@ -258,7 +256,6 @@ static void ota_task(void *pvParameters)
     }
     ESP_LOGI(TAG, "OTA: SHA-256 verificado OK");
 
-    // Finalizar y cambiar partición de arranque
     err = esp_ota_end(ota_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "OTA end: %s", esp_err_to_name(err));
@@ -328,6 +325,34 @@ static void handle_ota_message(const char *data, int data_len)
 }
 
 // ============================================================
+// Comandos
+// ============================================================
+
+static void handle_command(const char *data, int data_len)
+{
+    cJSON *json = cJSON_ParseWithLength(data, data_len);
+    if (!json) {
+        ESP_LOGE(TAG, "Comando: JSON inválido");
+        return;
+    }
+
+    cJSON *type = cJSON_GetObjectItem(json, "type");
+    if (cJSON_IsString(type)) {
+        if (strcmp(type->valuestring, "pump_on") == 0) {
+            pump_on = true;
+            ESP_LOGI(TAG, "Bomba: ENCENDIDA — temperatura comenzará a bajar");
+        } else if (strcmp(type->valuestring, "pump_off") == 0) {
+            pump_on = false;
+            ESP_LOGI(TAG, "Bomba: APAGADA — temperatura comenzará a subir");
+        } else {
+            ESP_LOGW(TAG, "Comando desconocido: %s", type->valuestring);
+        }
+    }
+
+    cJSON_Delete(json);
+}
+
+// ============================================================
 // MQTT
 // ============================================================
 
@@ -350,19 +375,18 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
 
         case MQTT_EVENT_DATA: {
             char topic[128] = {0};
-            int topic_len = event->topic_len < (int)sizeof(topic) - 1 ? event->topic_len : (int)sizeof(topic) - 1;
+            int topic_len = event->topic_len < (int)sizeof(topic) - 1
+                            ? event->topic_len : (int)sizeof(topic) - 1;
             strncpy(topic, event->topic, topic_len);
 
-            if (strcmp(topic, topic_ota) == 0) {
+            if (strcmp(topic, topic_commands) == 0) {
+                ESP_LOGI(TAG, "Comando recibido: %.*s", event->data_len, event->data);
+                handle_command(event->data, event->data_len);
+            } else if (strcmp(topic, topic_ota) == 0) {
                 ESP_LOGI(TAG, "Mensaje OTA recibido");
                 handle_ota_message(event->data, event->data_len);
-
-            } else if (strcmp(topic, topic_commands) == 0) {
-                ESP_LOGI(TAG, "Comando recibido: %.*s", event->data_len, event->data);
-
             } else if (strcmp(topic, topic_profile) == 0) {
                 ESP_LOGI(TAG, "Perfil recibido: %.*s", event->data_len, event->data);
-
             } else {
                 ESP_LOGI(TAG, "Mensaje en [%s]: %.*s", topic, event->data_len, event->data);
             }
@@ -398,25 +422,63 @@ static void mqtt_init(void)
 
 static void publish_readings_task(void *pvParameters)
 {
-    float temperature = 25.0f;
+    float temperature = TEMP_BASE;
     float humidity    = 65.0f;
     float light       = 300.0f;
+    float co2         = 500.0f;
+    bool  alert_sent  = false;
 
-    char payload[128];
+    char payload[256];
 
     while (1) {
-        // No publicar si hay una actualización OTA en curso
         if (!ota_in_progress) {
-            temperature += ((float)(esp_random() % 10) - 5) * 0.1f;
-            humidity    += ((float)(esp_random() % 10) - 5) * 0.2f;
-            light       += ((float)(esp_random() % 20) - 10) * 1.0f;
 
+            // --- Modelo de temperatura ---
+            if (pump_on) {
+                temperature -= TEMP_DROP_RATE;
+                if (temperature < TEMP_BASE) temperature = TEMP_BASE;
+            } else {
+                temperature += TEMP_RISE_RATE;
+                if (temperature > TEMP_MAX) temperature = TEMP_MAX;
+            }
+
+            // Ruido de baja amplitud en todos los sensores
+            float t_pub  = temperature + ((float)(esp_random() % 20) - 10) * 0.02f;
+            float h_pub  = humidity    + ((float)(esp_random() % 10) -  5) * 0.1f;
+            float l_pub  = light       + ((float)(esp_random() % 20) - 10) * 1.0f;
+            float c_pub  = co2         + ((float)(esp_random() % 10) -  5) * 1.0f;
+
+            // Publicar lectura
             snprintf(payload, sizeof(payload),
-                "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%.1f}",
-                temperature, humidity, light);
+                "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%.1f,\"co2\":%.1f}",
+                t_pub, h_pub, l_pub, c_pub);
+            esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
+            ESP_LOGI(TAG, "temp=%.1f hum=%.1f co2=%.1f | bomba=%s | alerta=%s",
+                t_pub, h_pub, c_pub,
+                pump_on    ? "ON"   : "OFF",
+                alert_sent ? "ACTIVA" : "ok");
 
-            int msg_id = esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
-            ESP_LOGI(TAG, "Lectura publicada (msg_id=%d): %s", msg_id, payload);
+            // --- Disparar alerta al cruzar el umbral (una sola vez por ciclo) ---
+            if (!alert_sent && temperature >= TEMP_ALERT) {
+                snprintf(payload, sizeof(payload),
+                    "{\"type\":\"temperature_high\",\"severity\":\"warning\","
+                    "\"message\":\"Temperatura critica: %.1f C (umbral: %.0f C). Activa la bomba.\"}",
+                    temperature, TEMP_ALERT);
+                esp_mqtt_client_publish(mqtt_client, topic_alerts, payload, 0, 1, 0);
+                ESP_LOGW(TAG, ">>> ALERTA enviada: temperatura=%.1f°C", temperature);
+                alert_sent = true;
+            }
+
+            // --- Resetear alerta al volver al rango seguro ---
+            if (alert_sent && !pump_on && temperature <= TEMP_SAFE) {
+                alert_sent = false;
+                ESP_LOGI(TAG, "Temperatura normalizada (%.1f°C) — alerta reseteada", temperature);
+            }
+            // Con bomba encendida también resetear cuando baje lo suficiente
+            if (alert_sent && pump_on && temperature <= TEMP_SAFE) {
+                alert_sent = false;
+                ESP_LOGI(TAG, "Temperatura normalizada con bomba (%.1f°C) — alerta reseteada", temperature);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(10000));
