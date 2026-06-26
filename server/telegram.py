@@ -20,11 +20,12 @@ def send_message(text: str) -> bool:
             timeout=10,
         )
         if res.ok:
+            print(f"[telegram] mensaje enviado ok")
             return True
-        logger.error("Telegram API error: %s", res.text)
+        print(f"[telegram] error API: {res.status_code} {res.text}")
         return False
     except Exception as e:
-        logger.error("Error enviando mensaje Telegram: %s", e)
+        print(f"[telegram] excepcion: {e}")
         return False
 
 

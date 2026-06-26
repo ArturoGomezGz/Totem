@@ -7,7 +7,7 @@ from db import SessionLocal
 from models import Alert, Unit
 from mqtt import mqtt_client
 from routers import alerts, auth, commands, firmware, internal, organizations, profiles, units
-from telegram import notify_alert
+from telegram import notify_alert, send_message
 
 
 def _retry_pending_alerts() -> None:
