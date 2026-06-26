@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -8,7 +9,9 @@ from models import Alert, Unit
 from mqtt import mqtt_client
 from routers import alerts, auth, commands, firmware, internal, organizations, profiles, units
 from routers import telegram as telegram_router
+from routers import live as live_router
 from telegram import notify_alert, notify_startup, notify_org_status, start_polling, stop_polling
+import ws as ws_module
 
 
 def _retry_pending_alerts() -> None:
@@ -37,6 +40,7 @@ def _retry_pending_alerts() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ws_module.set_event_loop(asyncio.get_event_loop())
     mqtt_client.connect()
     start_polling()
     _retry_pending_alerts()
@@ -57,4 +61,5 @@ app.include_router(firmware.router,        prefix="/api/v1")
 app.include_router(commands.router,        prefix="/api/v1")
 app.include_router(alerts.router,          prefix="/api/v1")
 app.include_router(telegram_router.router, prefix="/api/v1")
+app.include_router(live_router.router)
 app.include_router(internal.router)

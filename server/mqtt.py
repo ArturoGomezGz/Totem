@@ -58,6 +58,7 @@ class MQTTClient:
 
     def _handle(self, topic: str, payload: dict) -> None:
         import state
+        from ws import manager
         parts = topic.split("/")
         if len(parts) != 3:
             return
@@ -65,8 +66,14 @@ class MQTTClient:
         if kind == "readings":
             state.update_readings(unit_id, payload)
             self._persist_reading(unit_id, payload)
+            unit_state = state.get_unit(unit_id)
+            if unit_state:
+                manager.broadcast_sync(unit_id, {"type": "state", **unit_state})
         elif kind == "events" and "action" in payload:
             state.update_pump(unit_id, payload["action"])
+            unit_state = state.get_unit(unit_id)
+            if unit_state:
+                manager.broadcast_sync(unit_id, {"type": "state", **unit_state})
         elif kind == "alerts":
             self._persist_alert(unit_id, payload)
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 import { s } from './styles'
@@ -6,13 +6,12 @@ import ReadingsChart from '../components/ReadingsChart'
 import EventsList from '../components/EventsList'
 import AlertsList from '../components/AlertsList'
 
-const POLL_MS    = 5000
-const CMD_LOCK_MS = 15000   // ms de espera para que el server confirme el estado
+const CMD_LOCK_MS = 8000    // ms antes de que el WS confirme el cambio de bomba
 const OFFLINE_MS  = 35000   // sin lectura en este tiempo → unidad sin señal
+const WS_RECONNECT_MS = 3000
 const TABS = ['En vivo', 'Lecturas', 'Eventos', 'Alertas']
 
 function pumpBtnStyle(on, phase) {
-  // phase: 'sending' | 'pending' | 'on' | 'off'
   const neutral = phase === 'sending' || phase === 'pending'
   return {
     width: '200px',
@@ -43,10 +42,15 @@ export default function UnitDetail() {
   const [unit, setUnit]               = useState(null)
   const [unitMeta, setUnitMeta]       = useState(null)
   const [error, setError]             = useState(null)
+  const [wsConnected, setWsConnected] = useState(false)
   const [cmdLoading, setCmdLoading]   = useState(false)
   const [pumpPending, setPumpPending] = useState(false)
   const [tab, setTab]                 = useState('En vivo')
-  const pendingTimer                  = useRef(null)
+
+  const pendingTimer  = useRef(null)
+  const wsRef         = useRef(null)
+  const reconnectTimer = useRef(null)
+  const mountedRef    = useRef(true)
 
   const [profiles, setProfiles]                   = useState([])
   const [selectedProfileId, setSelectedProfileId] = useState('')
@@ -57,20 +61,62 @@ export default function UnitDetail() {
   const isOffline = u =>
     !u?.last_seen || Date.now() - new Date(u.last_seen).getTime() > OFFLINE_MS
 
-  const fetchState = useCallback(async () => {
-    try {
-      setUnit(await api.getUnitState(unitId))
+  // ── WebSocket ──────────────────────────────────────────────
+  const connectWs = () => {
+    if (!mountedRef.current) return
+    const token = localStorage.getItem('access_token')
+    if (!token) return
+
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const url   = `${proto}://${window.location.host}/ws/units/${unitId}?token=${token}`
+    const ws    = new WebSocket(url)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      if (!mountedRef.current) return
+      setWsConnected(true)
       setError(null)
-    } catch {
-      setError('Sin datos del dispositivo')
     }
-  }, [unitId])
+
+    ws.onmessage = (e) => {
+      if (!mountedRef.current) return
+      try {
+        const data = JSON.parse(e.data)
+        if (data.type === 'state') {
+          const { type: _, ...unitState } = data
+          setUnit(unitState)
+          // Si el servidor confirmó el estado de la bomba, salir del estado pending
+          setPumpPending(false)
+          if (pendingTimer.current) {
+            clearTimeout(pendingTimer.current)
+            pendingTimer.current = null
+          }
+        }
+      } catch { /* ignorar mensajes malformados */ }
+    }
+
+    ws.onerror = () => {
+      setWsConnected(false)
+    }
+
+    ws.onclose = () => {
+      if (!mountedRef.current) return
+      setWsConnected(false)
+      // Reconectar automáticamente
+      reconnectTimer.current = setTimeout(connectWs, WS_RECONNECT_MS)
+    }
+  }
 
   useEffect(() => {
-    fetchState()
-    const t = setInterval(fetchState, POLL_MS)
-    return () => clearInterval(t)
-  }, [fetchState])
+    mountedRef.current = true
+    connectWs()
+    return () => {
+      mountedRef.current = false
+      if (wsRef.current) wsRef.current.close()
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+      if (pendingTimer.current) clearTimeout(pendingTimer.current)
+    }
+  }, [unitId]) // eslint-disable-line
 
   useEffect(() => {
     api.getUnit(unitId).then(meta => {
@@ -84,9 +130,7 @@ export default function UnitDetail() {
     api.getProfiles(orgId).then(setProfiles).catch(() => {})
   }, [orgId])
 
-  // Limpiar timer si el componente se desmonta
-  useEffect(() => () => { if (pendingTimer.current) clearTimeout(pendingTimer.current) }, [])
-
+  // ── Acciones ───────────────────────────────────────────────
   const handleAssignProfile = async () => {
     setAssignMsg(null)
     setAssignError(null)
@@ -108,10 +152,13 @@ export default function UnitDetail() {
     setCmdLoading(true)
     try {
       await api.sendCommand(unitId, type)
-      // Comando enviado — esperar a que el server confirme el nuevo estado
+      // Esperar confirmación vía WebSocket (el ESP32 publica evento, servidor hace broadcast)
       setPumpPending(true)
       if (pendingTimer.current) clearTimeout(pendingTimer.current)
-      pendingTimer.current = setTimeout(() => setPumpPending(false), CMD_LOCK_MS)
+      // Fallback: si no llega confirmación por WS en CMD_LOCK_MS, salir del estado pending
+      pendingTimer.current = setTimeout(() => {
+        if (mountedRef.current) setPumpPending(false)
+      }, CMD_LOCK_MS)
     } catch {
       setError('Error al enviar comando')
     } finally {
@@ -119,11 +166,10 @@ export default function UnitDetail() {
     }
   }
 
-  const offline = isOffline(unit)
-  const on      = unit?.pump_on ?? false
-  const r       = unit?.readings
-
-  // Fase visual del botón
+  // ── Render ─────────────────────────────────────────────────
+  const offline   = isOffline(unit)
+  const on        = unit?.pump_on ?? false
+  const r         = unit?.readings
   const pumpPhase = cmdLoading ? 'sending'
     : pumpPending              ? 'pending'
     : on                       ? 'on'
@@ -140,7 +186,7 @@ export default function UnitDetail() {
           {unit?.last_seen
             ? new Date(unit.last_seen).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
             : '--:--'}
-          {offline && unit ? ' · sin señal' : ''}
+          {offline && unit ? ' · sin señal' : !wsConnected && unit ? ' · reconectando' : ''}
         </span>
       </header>
 
@@ -174,12 +220,8 @@ export default function UnitDetail() {
             <div style={s.pumpWrap}>
               {offline ? (
                 <div style={offlinePlaceholder}>
-                  <span style={{ fontSize: '13px', color: '#555', letterSpacing: '1px' }}>
-                    SIN SEÑAL
-                  </span>
-                  <span style={{ fontSize: '11px', color: '#444', marginTop: '4px' }}>
-                    Control no disponible
-                  </span>
+                  <span style={{ fontSize: '13px', color: '#555', letterSpacing: '1px' }}>SIN SEÑAL</span>
+                  <span style={{ fontSize: '11px', color: '#444', marginTop: '4px' }}>Control no disponible</span>
                 </div>
               ) : (
                 <button
