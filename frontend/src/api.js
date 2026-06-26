@@ -44,12 +44,14 @@ export const api = {
   register:         (email, password)    => request('POST', '/auth/register', { email, password }),
   login:            (email, password)    => request('POST', '/auth/login',    { email, password }),
   refresh:          (refresh_token)      => request('POST', '/auth/refresh',   { refresh_token }),
+  logout:           (refresh_token)      => request('POST', '/auth/logout',   { refresh_token }),
 
   getOrganizations: ()                   => request('GET',  '/organizations'),
   createOrganization: (name)             => request('POST', '/organizations',  { name }),
 
   getUnits:         (organization_id)    => request('GET',  `/units?organization_id=${organization_id}`),
   createUnit:       (body)               => request('POST', '/units', body),
+  getUnit:          (unit_id)            => request('GET',  `/units/${unit_id}`),
   getUnitState:     (unit_id)            => request('GET',  `/units/${unit_id}/state`),
 
   sendCommand:      (unit_id, type)      => request('POST', `/units/${unit_id}/commands`, { type }),

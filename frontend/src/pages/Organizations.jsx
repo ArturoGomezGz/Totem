@@ -35,7 +35,11 @@ export default function Organizations() {
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    const refresh_token = localStorage.getItem('refresh_token')
+    if (refresh_token) {
+      try { await api.logout(refresh_token) } catch { /* silencioso */ }
+    }
     clearTokens()
     navigate('/login')
   }

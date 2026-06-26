@@ -14,6 +14,7 @@ export default function UnitDetail() {
   const navigate          = useNavigate()
 
   const [unit, setUnit]           = useState(null)
+  const [unitMeta, setUnitMeta]   = useState(null)
   const [error, setError]         = useState(null)
   const [cmdLoading, setCmdLoading] = useState(false)
   const [tab, setTab]             = useState('En vivo')
@@ -32,6 +33,10 @@ export default function UnitDetail() {
     const t = setInterval(fetchState, POLL_MS)
     return () => clearInterval(t)
   }, [fetchState])
+
+  useEffect(() => {
+    api.getUnit(unitId).then(setUnitMeta).catch(() => {})
+  }, [unitId])
 
   const togglePump = async () => {
     if (cmdLoading || !unit) return
@@ -54,6 +59,9 @@ export default function UnitDetail() {
     <div style={s.page}>
       <header style={s.header}>
         <button style={s.btnGhost} onClick={() => navigate(`/organizations/${orgId}/units`)}>← Volver</button>
+        {unitMeta?.name && (
+          <span style={{ fontSize: '15px', fontWeight: '600', color: '#fff' }}>{unitMeta.name}</span>
+        )}
         <span style={s.timestamp}>
           {unit?.last_seen
             ? new Date(unit.last_seen).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
