@@ -7,36 +7,59 @@ import EventsList from '../components/EventsList'
 import AlertsList from '../components/AlertsList'
 
 const POLL_MS    = 5000
-const CMD_LOCK_MS = 15000  // ms que el polling no puede sobrescribir pump_on tras un comando
+const CMD_LOCK_MS = 15000   // ms de espera para que el server confirme el estado
+const OFFLINE_MS  = 35000   // sin lectura en este tiempo → unidad sin señal
 const TABS = ['En vivo', 'Lecturas', 'Eventos', 'Alertas']
+
+function pumpBtnStyle(on, phase) {
+  // phase: 'sending' | 'pending' | 'on' | 'off'
+  const neutral = phase === 'sending' || phase === 'pending'
+  return {
+    width: '200px',
+    height: '200px',
+    borderRadius: '50%',
+    border: 'none',
+    cursor: neutral ? 'wait' : 'pointer',
+    background: neutral ? '#222' : on ? '#c0392b' : '#27ae60',
+    boxShadow: neutral ? 'none'
+      : on ? '0 0 48px rgba(192,57,43,0.5)'
+           : '0 0 48px rgba(39,174,96,0.4)',
+    transition: 'background 0.4s, box-shadow 0.4s, transform 0.1s',
+    transform: phase === 'sending' ? 'scale(0.96)' : 'scale(1)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    WebkitTapHighlightColor: 'transparent',
+    opacity: neutral ? 0.7 : 1,
+  }
+}
 
 export default function UnitDetail() {
   const { orgId, unitId } = useParams()
   const navigate          = useNavigate()
 
-  const [unit, setUnit]             = useState(null)
-  const [unitMeta, setUnitMeta]     = useState(null)
-  const [error, setError]           = useState(null)
-  const [cmdLoading, setCmdLoading] = useState(false)
-  const [tab, setTab]               = useState('En vivo')
-  const cmdSentAt = useRef(null)  // timestamp del último comando enviado
+  const [unit, setUnit]               = useState(null)
+  const [unitMeta, setUnitMeta]       = useState(null)
+  const [error, setError]             = useState(null)
+  const [cmdLoading, setCmdLoading]   = useState(false)
+  const [pumpPending, setPumpPending] = useState(false)
+  const [tab, setTab]                 = useState('En vivo')
+  const pendingTimer                  = useRef(null)
 
-  const [profiles, setProfiles]         = useState([])
+  const [profiles, setProfiles]                   = useState([])
   const [selectedProfileId, setSelectedProfileId] = useState('')
-  const [assignMsg, setAssignMsg]       = useState(null)
-  const [assignError, setAssignError]   = useState(null)
-  const [assignLoading, setAssignLoading] = useState(false)
+  const [assignMsg, setAssignMsg]                 = useState(null)
+  const [assignError, setAssignError]             = useState(null)
+  const [assignLoading, setAssignLoading]         = useState(false)
+
+  const isOffline = u =>
+    !u?.last_seen || Date.now() - new Date(u.last_seen).getTime() > OFFLINE_MS
 
   const fetchState = useCallback(async () => {
     try {
-      const fresh = await api.getUnitState(unitId)
-      setUnit(prev => {
-        // Si se envió un comando recientemente, preservar el pump_on local
-        // para no revertir el estado optimista antes de que el servidor lo confirme
-        const locked = cmdSentAt.current && (Date.now() - cmdSentAt.current) < CMD_LOCK_MS
-        if (locked && prev) return { ...fresh, pump_on: prev.pump_on }
-        return fresh
-      })
+      setUnit(await api.getUnitState(unitId))
       setError(null)
     } catch {
       setError('Sin datos del dispositivo')
@@ -61,6 +84,9 @@ export default function UnitDetail() {
     api.getProfiles(orgId).then(setProfiles).catch(() => {})
   }, [orgId])
 
+  // Limpiar timer si el componente se desmonta
+  useEffect(() => () => { if (pendingTimer.current) clearTimeout(pendingTimer.current) }, [])
+
   const handleAssignProfile = async () => {
     setAssignMsg(null)
     setAssignError(null)
@@ -77,27 +103,31 @@ export default function UnitDetail() {
   }
 
   const togglePump = async () => {
-    if (cmdLoading || !unit) return
-    const wasOn = unit.pump_on
-    const type  = wasOn ? 'pump_off' : 'pump_on'
-    // Flip optimista inmediato + bloquear polling por CMD_LOCK_MS
-    setUnit(prev => prev ? { ...prev, pump_on: !wasOn } : prev)
-    cmdSentAt.current = Date.now()
+    if (cmdLoading || pumpPending || !unit || isOffline(unit)) return
+    const type = unit.pump_on ? 'pump_off' : 'pump_on'
     setCmdLoading(true)
     try {
       await api.sendCommand(unitId, type)
+      // Comando enviado — esperar a que el server confirme el nuevo estado
+      setPumpPending(true)
+      if (pendingTimer.current) clearTimeout(pendingTimer.current)
+      pendingTimer.current = setTimeout(() => setPumpPending(false), CMD_LOCK_MS)
     } catch {
-      // Revertir si el comando falló
-      setUnit(prev => prev ? { ...prev, pump_on: wasOn } : prev)
-      cmdSentAt.current = null
       setError('Error al enviar comando')
     } finally {
       setCmdLoading(false)
     }
   }
 
-  const on = unit?.pump_on ?? false
-  const r  = unit?.readings
+  const offline = isOffline(unit)
+  const on      = unit?.pump_on ?? false
+  const r       = unit?.readings
+
+  // Fase visual del botón
+  const pumpPhase = cmdLoading ? 'sending'
+    : pumpPending              ? 'pending'
+    : on                       ? 'on'
+                               : 'off'
 
   return (
     <div style={s.page}>
@@ -106,16 +136,17 @@ export default function UnitDetail() {
         {unitMeta?.name && (
           <span style={{ fontSize: '15px', fontWeight: '600', color: '#fff' }}>{unitMeta.name}</span>
         )}
-        <span style={s.timestamp}>
+        <span style={{ ...s.timestamp, color: offline && unit ? '#e74c3c' : '#555' }}>
           {unit?.last_seen
             ? new Date(unit.last_seen).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
             : '--:--'}
+          {offline && unit ? ' · sin señal' : ''}
         </span>
       </header>
 
       <div style={s.container}>
         {/* Tab bar */}
-        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid #222', paddingBottom: '0' }}>
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid #222' }}>
           {TABS.map(t => (
             <button
               key={t}
@@ -141,23 +172,42 @@ export default function UnitDetail() {
         {tab === 'En vivo' && (
           <>
             <div style={s.pumpWrap}>
-              <button
-                style={s.pumpBtn(on, cmdLoading)}
-                onClick={togglePump}
-                disabled={cmdLoading || !unit}
-              >
-                <span style={s.pumpAction}>{cmdLoading ? '...' : on ? 'APAGAR' : 'REGAR'}</span>
-                <span style={s.pumpStatus}>BOMBA {on ? 'ENCENDIDA' : 'APAGADA'}</span>
-              </button>
+              {offline ? (
+                <div style={offlinePlaceholder}>
+                  <span style={{ fontSize: '13px', color: '#555', letterSpacing: '1px' }}>
+                    SIN SEÑAL
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#444', marginTop: '4px' }}>
+                    Control no disponible
+                  </span>
+                </div>
+              ) : (
+                <button
+                  style={pumpBtnStyle(on, pumpPhase)}
+                  onClick={togglePump}
+                  disabled={cmdLoading || pumpPending}
+                >
+                  <span style={s.pumpAction}>
+                    {pumpPhase === 'sending' ? '...'
+                      : pumpPhase === 'pending' ? 'Espera'
+                      : on ? 'APAGAR' : 'REGAR'}
+                  </span>
+                  <span style={s.pumpStatus}>
+                    {pumpPhase === 'sending' ? 'ENVIANDO'
+                      : pumpPhase === 'pending' ? 'CONFIRMANDO'
+                      : `BOMBA ${on ? 'ENCENDIDA' : 'APAGADA'}`}
+                  </span>
+                </button>
+              )}
             </div>
 
             {r ? (
               <div style={s.sensors}>
                 {[
-                  { value: r.temperature, unit: '°C',      label: 'TEMPERATURA' },
-                  { value: r.humidity,    unit: '%',        label: 'HUMEDAD'     },
-                  { value: r.light,       unit: '',         label: 'LUZ PAR'     },
-                  { value: r.co2,         unit: '',         label: 'CO₂ PPM'     },
+                  { value: r.temperature, unit: '°C', label: 'TEMPERATURA' },
+                  { value: r.humidity,    unit: '%',  label: 'HUMEDAD'     },
+                  { value: r.light,       unit: '',   label: 'LUZ PAR'     },
+                  { value: r.co2,         unit: '',   label: 'CO₂ PPM'     },
                 ].map(({ value, unit, label }) => (
                   <div key={label} style={s.sensor}>
                     <span style={s.sensorValue}>{value != null ? `${value}${unit}` : '—'}</span>
@@ -176,12 +226,7 @@ export default function UnitDetail() {
                 <select
                   value={selectedProfileId}
                   onChange={e => setSelectedProfileId(e.target.value)}
-                  style={{
-                    ...s.input,
-                    flex: 1,
-                    appearance: 'none',
-                    cursor: 'pointer',
-                  }}
+                  style={{ ...s.input, flex: 1, appearance: 'none', cursor: 'pointer' }}
                 >
                   <option value="">Sin perfil</option>
                   {profiles.map(p => (
@@ -202,15 +247,22 @@ export default function UnitDetail() {
           </>
         )}
 
-        {/* Lecturas */}
         {tab === 'Lecturas' && <ReadingsChart unitId={unitId} />}
-
-        {/* Eventos */}
-        {tab === 'Eventos' && <EventsList unitId={unitId} />}
-
-        {/* Alertas */}
-        {tab === 'Alertas' && <AlertsList unitId={unitId} />}
+        {tab === 'Eventos'  && <EventsList   unitId={unitId} />}
+        {tab === 'Alertas'  && <AlertsList   unitId={unitId} />}
       </div>
     </div>
   )
+}
+
+const offlinePlaceholder = {
+  width: '200px',
+  height: '200px',
+  borderRadius: '50%',
+  border: '2px dashed #333',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '4px',
 }
