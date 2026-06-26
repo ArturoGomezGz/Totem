@@ -1,0 +1,7 @@
+# Copiar a sdkconfig.defaults y ajustar los valores.
+# Este archivo NO debe contener credenciales reales.
+# sdkconfig.defaults está en .gitignore — nunca committear credenciales.
+
+# Tabla de particiones personalizada con soporte OTA
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
