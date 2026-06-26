@@ -13,11 +13,17 @@ export default function UnitDetail() {
   const { orgId, unitId } = useParams()
   const navigate          = useNavigate()
 
-  const [unit, setUnit]           = useState(null)
-  const [unitMeta, setUnitMeta]   = useState(null)
-  const [error, setError]         = useState(null)
+  const [unit, setUnit]             = useState(null)
+  const [unitMeta, setUnitMeta]     = useState(null)
+  const [error, setError]           = useState(null)
   const [cmdLoading, setCmdLoading] = useState(false)
-  const [tab, setTab]             = useState('En vivo')
+  const [tab, setTab]               = useState('En vivo')
+
+  const [profiles, setProfiles]         = useState([])
+  const [selectedProfileId, setSelectedProfileId] = useState('')
+  const [assignMsg, setAssignMsg]       = useState(null)
+  const [assignError, setAssignError]   = useState(null)
+  const [assignLoading, setAssignLoading] = useState(false)
 
   const fetchState = useCallback(async () => {
     try {
@@ -37,6 +43,26 @@ export default function UnitDetail() {
   useEffect(() => {
     api.getUnit(unitId).then(setUnitMeta).catch(() => {})
   }, [unitId])
+
+  useEffect(() => {
+    if (!orgId) return
+    api.getProfiles(orgId).then(setProfiles).catch(() => {})
+  }, [orgId])
+
+  const handleAssignProfile = async () => {
+    setAssignMsg(null)
+    setAssignError(null)
+    setAssignLoading(true)
+    try {
+      const profileId = selectedProfileId === '' ? null : selectedProfileId
+      const res = await api.assignProfile(unitId, profileId)
+      setAssignMsg(res?.detail ?? 'OK')
+    } catch (err) {
+      setAssignError(err.message)
+    } finally {
+      setAssignLoading(false)
+    }
+  }
 
   const togglePump = async () => {
     if (cmdLoading || !unit) return
@@ -124,6 +150,37 @@ export default function UnitDetail() {
             ) : (
               <p style={s.muted}>{error ?? 'Esperando datos del dispositivo...'}</p>
             )}
+
+            {/* Perfil activo */}
+            <div style={{ marginTop: '32px' }}>
+              <p style={{ ...s.cardSub, marginBottom: '10px' }}>PERFIL ACTIVO</p>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select
+                  value={selectedProfileId}
+                  onChange={e => setSelectedProfileId(e.target.value)}
+                  style={{
+                    ...s.input,
+                    flex: 1,
+                    appearance: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">Sin perfil</option>
+                  {profiles.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <button
+                  style={{ ...s.btnSm, flexShrink: 0 }}
+                  onClick={handleAssignProfile}
+                  disabled={assignLoading}
+                >
+                  {assignLoading ? '...' : 'Asignar'}
+                </button>
+              </div>
+              {assignMsg   && <p style={{ color: '#27ae60', fontSize: '13px', margin: '6px 0 0' }}>{assignMsg}</p>}
+              {assignError && <p style={s.error}>{assignError}</p>}
+            </div>
           </>
         )}
 

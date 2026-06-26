@@ -64,9 +64,14 @@ export default function Organizations() {
               <p style={s.cardTitle}>{org.name}</p>
               <p style={s.cardSub}>{org.role}</p>
             </div>
-            <button style={s.btnSm} onClick={() => navigate(`/organizations/${org.id}/units`)}>
-              Entrar
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button style={s.btnSm} onClick={() => navigate(`/organizations/${org.id}/profiles`)}>
+                Perfiles
+              </button>
+              <button style={s.btnSm} onClick={() => navigate(`/organizations/${org.id}/units`)}>
+                Entrar
+              </button>
+            </div>
           </div>
         ))}
 

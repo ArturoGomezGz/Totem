@@ -68,4 +68,10 @@ export const api = {
     const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)))
     return request('GET', `/alerts?${q}`)
   },
+
+  getProfiles:   (organization_id)          => request('GET',    `/profiles?organization_id=${organization_id}`),
+  createProfile: (body)                     => request('POST',   '/profiles', body),
+  updateProfile: (id, body)                 => request('PUT',    `/profiles/${id}`, body),
+  deleteProfile: (id)                       => request('DELETE', `/profiles/${id}`),
+  assignProfile: (unit_id, profile_id)      => request('PUT',    `/units/${unit_id}/profile`, { profile_id }),
 }

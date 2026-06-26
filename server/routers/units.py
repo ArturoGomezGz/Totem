@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 import state
 from auth import get_current_user
 from db import get_db
-from models import DeviceEvent, Membership, Reading, TotemConfig, Unit, User
+from models import CropProfile, DeviceEvent, Membership, Reading, TotemConfig, Unit, User
+from mqtt import mqtt_client
 
 router = APIRouter(tags=["units"])
 
@@ -418,3 +419,94 @@ def get_events(
         )
         for e in events
     ]
+
+
+# ---------- Profile assignment ----------
+
+class AssignProfileIn(BaseModel):
+    profile_id: Optional[str] = None
+
+
+@router.put(
+    "/units/{unit_id}/profile",
+    summary="Asignar o quitar el perfil activo de una unidad",
+    description="""
+**¿Qué hace?**
+Actualiza el perfil de cultivo activo de una unidad totem. Si `profile_id` es `null`,
+quita el perfil activo sin asignar uno nuevo. Si se asigna un perfil, verifica que
+pertenezca a la misma organización que la unidad y publica el perfil completo al topic
+MQTT de la unidad para que el dispositivo lo reciba.
+
+**¿Para qué?**
+Permite al operador cambiar la receta de cultivo activa de una unidad desde el dashboard
+sin intervención física. El perfil publicado por MQTT es consumido por el firmware para
+ajustar los parámetros de decisión de riego.
+
+**¿Dónde se usa?**
+Vista de detalle de unidad — sección "Perfil activo" en la pestaña En vivo.
+""",
+    responses={
+        200: {"description": "Perfil asignado o quitado correctamente"},
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "La unidad no pertenece a una organización del usuario"},
+        404: {"description": "Unidad o perfil no encontrado"},
+        409: {"description": "El perfil no pertenece a la misma organización que la unidad"},
+    },
+    tags=["units"],
+)
+def assign_profile(
+    unit_id: str,
+    body: AssignProfileIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    unit = _require_unit_access(unit_id, current_user, db)
+
+    if body.profile_id is None:
+        config = db.query(TotemConfig).filter(TotemConfig.unit_id == unit_id).first()
+        if config:
+            config.active_profile_id = None
+            db.commit()
+        return {"detail": "Perfil quitado"}
+
+    # Verificar que el perfil existe
+    profile = db.query(CropProfile).filter(CropProfile.id == body.profile_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+
+    # Verificar que el perfil pertenece a la misma org que la unidad
+    if str(profile.organization_id) != str(unit.organization_id):
+        raise HTTPException(
+            status_code=409,
+            detail="El perfil no pertenece a la misma organización que la unidad",
+        )
+
+    config = db.query(TotemConfig).filter(TotemConfig.unit_id == unit_id).first()
+    if config:
+        config.active_profile_id = body.profile_id
+    else:
+        db.add(TotemConfig(unit_id=unit_id, active_profile_id=body.profile_id))
+    db.commit()
+
+    # Publicar el perfil completo al topic MQTT de la unidad
+    mqtt_client.publish(
+        f"totem/{unit_id}/profile",
+        {
+            "id": str(profile.id),
+            "organization_id": str(profile.organization_id),
+            "name": profile.name,
+            "species": profile.species,
+            "temp_min": profile.temp_min,
+            "temp_max": profile.temp_max,
+            "humidity_min": profile.humidity_min,
+            "humidity_max": profile.humidity_max,
+            "light_min": profile.light_min,
+            "light_max": profile.light_max,
+            "co2_min": profile.co2_min,
+            "co2_max": profile.co2_max,
+            "irrigation_method": profile.irrigation_method,
+            "irrigation_params": profile.irrigation_params,
+        },
+    )
+
+    return {"detail": "Perfil asignado"}

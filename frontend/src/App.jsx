@@ -4,6 +4,7 @@ import Register from './pages/Register'
 import Organizations from './pages/Organizations'
 import Units from './pages/Units'
 import UnitDetail from './pages/UnitDetail'
+import Profiles from './pages/Profiles'
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/organizations"                              element={<Organizations />} />
           <Route path="/organizations/:orgId/units"                element={<Units />} />
           <Route path="/organizations/:orgId/units/:unitId"        element={<UnitDetail />} />
+          <Route path="/organizations/:orgId/profiles"             element={<Profiles />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/organizations" replace />} />
