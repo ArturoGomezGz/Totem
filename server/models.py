@@ -141,3 +141,20 @@ class FirmwareRelease(Base):
     binary_path: Mapped[str] = mapped_column(String, nullable=False)
     sha256: Mapped[str] = mapped_column(String, nullable=False)
     released_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
+
+
+class TelegramUser(Base):
+    __tablename__ = "telegram_users"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    chat_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    linked_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
+
+
+class TelegramLinkToken(Base):
+    __tablename__ = "telegram_link_tokens"
+
+    token: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMPTZ)

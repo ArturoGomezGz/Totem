@@ -98,7 +98,11 @@ class MQTTClient:
         db = SessionLocal()
         try:
             unit = db.query(Unit).filter(Unit.id == unit_id_str).first()
-            unit_name = unit.name if unit else unit_id_str
+            if not unit:
+                print(f"[mqtt] alerta de unidad desconocida: {unit_id_str}")
+                return
+            unit_name = unit.name
+            org_id = str(unit.organization_id)
 
             alert = Alert(
                 unit_id=uuid.UUID(unit_id_str),
@@ -110,7 +114,7 @@ class MQTTClient:
             db.add(alert)
             db.flush()
 
-            sent = notify_alert(unit_name, alert_type, severity, message)
+            sent = notify_alert(unit_id_str, unit_name, alert_type, severity, message, org_id)
             if sent:
                 alert.telegram_sent_at = datetime.now(timezone.utc)
 

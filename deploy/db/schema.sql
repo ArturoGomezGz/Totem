@@ -332,6 +332,33 @@ CREATE TABLE firmware_releases (
     CONSTRAINT firmware_releases_sha256_not_empty      CHECK (sha256 <> '')
 );
 
+-- telegram_users
+-- ---------------------------------------------------------------------------
+-- Vinculación entre usuarios de Totem y chats de Telegram.
+-- Un usuario puede tener un solo chat vinculado a la vez.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE telegram_users (
+    user_id   UUID        PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    chat_id   VARCHAR     NOT NULL UNIQUE,
+    linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- telegram_link_tokens
+-- ---------------------------------------------------------------------------
+-- Tokens de un solo uso (TTL 5 min) para vincular la cuenta de Telegram.
+-- Se generan desde el dashboard y se consumen vía /vincular en el bot.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE telegram_link_tokens (
+    token      VARCHAR     PRIMARY KEY,
+    user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at    TIMESTAMPTZ,
+
+    CONSTRAINT telegram_link_tokens_token_not_empty CHECK (token <> '')
+);
+
 -- =============================================================================
 -- Seed: datos mínimos para desarrollo y testing
 -- =============================================================================
