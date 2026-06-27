@@ -27,8 +27,8 @@
 #define TEMP_ALERT      28.0f   // umbral que dispara alerta
 #define TEMP_MAX        31.0f   // techo absoluto (ALERT + 3)
 #define TEMP_SAFE       26.0f   // por debajo de aquí se resetea la alerta (2°C bajo el umbral)
-#define TEMP_RISE_RATE   0.3f   // °C por ciclo con bomba apagada
-#define TEMP_DROP_RATE   0.5f   // °C por ciclo con bomba encendida
+#define TEMP_RISE_RATE   1.4f   // °C por ciclo con bomba apagada  (~1 min de 20 a 28)
+#define TEMP_DROP_RATE   1.4f   // °C por ciclo con bomba encendida (~1 min de 28 a 20)
 
 static const char *TAG = "simulator";
 static EventGroupHandle_t wifi_events;
