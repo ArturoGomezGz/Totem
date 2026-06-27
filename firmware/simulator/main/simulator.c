@@ -26,7 +26,7 @@
 #define TEMP_BASE       20.0f   // temperatura inicial
 #define TEMP_ALERT      28.0f   // umbral que dispara alerta
 #define TEMP_MAX        31.0f   // techo absoluto (ALERT + 3)
-#define TEMP_SAFE       22.0f   // por debajo de aquí la bomba puede apagarse
+#define TEMP_SAFE       26.0f   // por debajo de aquí se resetea la alerta (2°C bajo el umbral)
 #define TEMP_RISE_RATE   0.3f   // °C por ciclo con bomba apagada
 #define TEMP_DROP_RATE   0.5f   // °C por ciclo con bomba encendida
 
