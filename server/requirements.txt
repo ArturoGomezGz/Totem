@@ -10,3 +10,4 @@ bcrypt==4.2.0
 pydantic[email]==2.9.2
 python-multipart==0.0.12
 requests==2.32.3
+websockets==13.1
