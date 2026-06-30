@@ -1,96 +1,109 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { s } from './styles'
+import { Button, Card, Badge, Alert } from '../design-system'
+import AppShell from '../components/AppShell'
+import { useOrg } from '../contexts/OrgContext'
+
+const TYPE_LABEL = { totem: 'Totem', supply_tank: 'Tanque de suministro' }
 
 export default function Units() {
-  const { orgId } = useParams()
-  const navigate  = useNavigate()
+  const navigate                   = useNavigate()
+  const { activeOrgId, activeOrg } = useOrg()
 
-  const [units, setUnits]       = useState([])
-  const [name, setName]         = useState('')
-  const [type, setType]         = useState('totem')
-  const [error, setError]       = useState(null)
-  const [loading, setLoading]   = useState(false)
-  const [newUnit, setNewUnit]   = useState(null)
+  const [units, setUnits] = useState([])
+  const [error, setError] = useState(null)
 
-  const load = async () => {
-    try {
-      setUnits(await api.getUnits(orgId))
-    } catch (err) {
-      setError(err.message)
-    }
-  }
+  useEffect(() => {
+    if (!activeOrgId) return
+    api.getUnits(activeOrgId)
+      .then(data => { setUnits(data); setError(null) })
+      .catch(err => setError(err.message))
+  }, [activeOrgId])
 
-  useEffect(() => { load() }, [orgId])
-
-  const create = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    try {
-      const created = await api.createUnit({ organization_id: orgId, type, name })
-      setNewUnit(created)
-      setName('')
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+  if (!activeOrgId) {
+    return (
+      <AppShell>
+        <div style={{
+          textAlign: 'center', padding: 'var(--space-9) var(--space-4)',
+          border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-md)',
+        }}>
+          <p style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)', fontSize: 'var(--text-base)', color: 'var(--text-strong)', marginBottom: 'var(--space-2)' }}>
+            Sin organización activa
+          </p>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            Selecciona una organización en el menú de la barra superior para ver las unidades.
+          </p>
+        </div>
+      </AppShell>
+    )
   }
 
   return (
-    <div style={s.page}>
-      <header style={s.header}>
-        <button style={s.btnGhost} onClick={() => navigate('/organizations')}>← Volver</button>
-        <span style={s.logo}>TOTEM</span>
-      </header>
-
-      <div style={s.container}>
-        <h2 style={s.title}>Unidades</h2>
-
-        {units.length === 0 && !error && (
-          <p style={s.muted}>No hay unidades registradas.</p>
-        )}
-
-        {units.map(unit => (
-          <div key={unit.id} style={s.card}>
-            <div>
-              <p style={s.cardTitle}>{unit.name}</p>
-              <p style={s.cardSub}>{unit.type} · {unit.is_active ? 'activa' : 'inactiva'}</p>
-            </div>
-            <button style={s.btnSm} onClick={() => navigate(`/organizations/${orgId}/units/${unit.id}`)}>
-              Ver
-            </button>
-          </div>
-        ))}
-
-        {error && <p style={s.error}>{error}</p>}
-
-        {newUnit && (
-          <div style={s.apiKeyBox}>
-            <p style={s.cardTitle}>Unidad creada — guarda la API Key</p>
-            <p style={s.muted}>Solo se muestra una vez. Flashéala en el dispositivo.</p>
-            <code style={s.apiKey}>{newUnit.api_key}</code>
-            <button style={{ ...s.btnSm, marginTop: '12px' }} onClick={() => setNewUnit(null)}>
-              Entendido
-            </button>
-          </div>
-        )}
-
-        <form style={{ ...s.form, marginTop: '32px' }} onSubmit={create}>
-          <h3 style={{ ...s.title, fontSize: '14px' }}>Registrar unidad</h3>
-          <input style={s.input} placeholder="Nombre" value={name} onChange={e => setName(e.target.value)} required />
-          <select style={s.input} value={type} onChange={e => setType(e.target.value)}>
-            <option value="totem">Totem</option>
-            <option value="supply_tank">Tanque de suministro</option>
-          </select>
-          <button style={s.btn} type="submit" disabled={loading}>
-            {loading ? 'Registrando...' : 'Registrar'}
-          </button>
-        </form>
+    <AppShell>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
+        <div>
+          <h2 style={{
+            fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
+            fontSize: 'var(--text-xl)', color: 'var(--text-strong)',
+          }}>
+            Unidades
+          </h2>
+          {activeOrg && (
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
+              {activeOrg.name}
+            </p>
+          )}
+        </div>
+        <Button variant="primary" size="sm" onClick={() => navigate('/units/new')}>
+          + Registrar
+        </Button>
       </div>
-    </div>
+
+      {error && (
+        <Alert tone="danger" style={{ marginBottom: 'var(--space-4)' }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {units.length === 0 && !error && (
+        <div style={{
+          textAlign: 'center', padding: 'var(--space-8) var(--space-4)',
+          border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-md)',
+          color: 'var(--text-muted)',
+        }}>
+          <p style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--text-base)' }}>
+            No hay unidades registradas en esta organización.
+          </p>
+          <Button variant="primary" onClick={() => navigate('/units/new')}>
+            Registrar primera unidad
+          </Button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        {units.map(unit => (
+          <Card
+            key={unit.id}
+            interactive
+            onClick={() => navigate(`/units/${unit.id}`)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+          >
+            <div>
+              <p style={{
+                fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
+                fontSize: 'var(--text-base)', color: 'var(--text-strong)', marginBottom: 'var(--space-2)',
+              }}>
+                {unit.name}
+              </p>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                <Badge tone="neutral">{TYPE_LABEL[unit.type] ?? unit.type}</Badge>
+              </div>
+            </div>
+            <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1 }}>›</span>
+          </Card>
+        ))}
+      </div>
+    </AppShell>
   )
 }

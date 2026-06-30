@@ -1,0 +1,64 @@
+:root {
+  --blue-950: #002A43;
+  --blue-900: #003A5C;
+  --blue-800: #00557F;
+  --blue-700: #0077AA;
+  --blue-600: #0089bf;
+  --blue-100: #cfe3ec;
+  --blue-050: #E0EBF0;
+
+  --teal-600: #00897f;
+  --teal-500: #00A99D;
+  --teal-100: #c7ece9;
+
+  --green-600: #3a9374;
+  --green-500: #4BAE8A;
+  --green-100: #d3ece2;
+
+  --lime-600: #6fa733;
+  --lime-500: #8DC44A;
+  --lime-100: #e6f1d3;
+
+  --logo-navy: #2E3D6E;
+
+  --ink-900: #1A2533;
+  --ink-700: #344052;
+  --ink-500: #5a6675;
+  --ink-400: #8793a3;
+  --ink-300: #b8c1cc;
+  --ink-200: #d9e0e7;
+  --ink-100: #eaeef2;
+  --ink-050: #f4f7f9;
+  --white: #ffffff;
+
+  --color-primary: var(--blue-900);
+  --color-accent: var(--blue-700);
+  --color-secondary: var(--teal-500);
+
+  --text-strong: var(--ink-900);
+  --text-body: var(--ink-700);
+  --text-muted: var(--ink-500);
+  --text-on-dark: var(--white);
+  --text-link: var(--blue-700);
+
+  --surface-page: var(--white);
+  --surface-card: var(--white);
+  --surface-sunken: var(--blue-050);
+  --surface-fill: var(--ink-050);
+  --surface-inverse: var(--blue-900);
+
+  --border-subtle: var(--ink-200);
+  --border-default: var(--ink-300);
+  --border-strong: var(--blue-900);
+
+  --status-success: var(--green-500);
+  --status-success-fill: var(--green-100);
+  --status-info: var(--blue-700);
+  --status-info-fill: var(--blue-100);
+  --status-warning: #E0A52B;
+  --status-warning-fill: #f8eccf;
+  --status-danger: #C4453B;
+  --status-danger-fill: #f6dcd9;
+
+  --focus-ring: 0 0 0 3px rgba(0, 119, 170, 0.35);
+}

@@ -1,11 +1,39 @@
+@import url('./design-system/tokens/fonts.css');
+@import url('./design-system/tokens/colors.css');
+@import url('./design-system/tokens/typography.css');
+@import url('./design-system/tokens/spacing.css');
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: #111;
-  color: #fff;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  color: var(--text-body);
+  background: var(--surface-fill);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100dvh;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+textarea {
+  resize: vertical;
 }

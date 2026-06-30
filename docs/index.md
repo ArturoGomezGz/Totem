@@ -72,6 +72,7 @@ Ecosistema Totem
 | `capa2/stack.md` | Decisiones de stack — FastAPI, Mosquitto, TimescaleDB, React, Telegram |
 | `capa2/api-contract.md` | Contrato de API — endpoints, payloads, autenticación |
 | `capa2/schema.md` | Esquema de base de datos |
+| `capa2/frontend-redesign.md` | Rediseño del frontend — design system, dashboard modular, fases de implementación |
 
 ### Transversal
 | Documento | Descripción |

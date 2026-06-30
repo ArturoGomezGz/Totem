@@ -1,10 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import Organizations from './pages/Organizations'
 import Units from './pages/Units'
+import NewUnitPage from './pages/NewUnitPage'
 import UnitDetail from './pages/UnitDetail'
 import Profiles from './pages/Profiles'
+import ProfileFormPage from './pages/ProfileFormPage'
+import SettingsPage from './pages/SettingsPage'
+import Organizations from './pages/Organizations'
+import NewOrganizationPage from './pages/NewOrganizationPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -15,13 +19,18 @@ export default function App() {
         <Route path="/register" element={<Register />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="/organizations"                              element={<Organizations />} />
-          <Route path="/organizations/:orgId/units"                element={<Units />} />
-          <Route path="/organizations/:orgId/units/:unitId"        element={<UnitDetail />} />
-          <Route path="/organizations/:orgId/profiles"             element={<Profiles />} />
+          <Route path="/units"                    element={<Units />} />
+          <Route path="/units/new"                element={<NewUnitPage />} />
+          <Route path="/units/:unitId"            element={<UnitDetail />} />
+          <Route path="/profiles"                 element={<Profiles />} />
+          <Route path="/profiles/new"             element={<ProfileFormPage />} />
+          <Route path="/profiles/:profileId/edit" element={<ProfileFormPage />} />
+          <Route path="/settings"                 element={<SettingsPage />} />
+          <Route path="/organizations"            element={<Organizations />} />
+          <Route path="/organizations/new"        element={<NewOrganizationPage />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/organizations" replace />} />
+        <Route path="*" element={<Navigate to="/units" replace />} />
       </Routes>
     </BrowserRouter>
   )

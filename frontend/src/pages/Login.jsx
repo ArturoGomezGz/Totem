@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { api, saveTokens } from '../api'
-import { s } from './styles'
-
+import { Button, Input, Alert } from '../design-system'
 export default function Login() {
   const navigate = useNavigate()
   const [email, setEmail]       = useState('')
@@ -17,7 +16,7 @@ export default function Login() {
     try {
       const data = await api.login(email, password)
       saveTokens(data.access_token, data.refresh_token)
-      navigate('/organizations')
+      navigate('/units', { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -26,18 +25,87 @@ export default function Login() {
   }
 
   return (
-    <div style={s.page}>
-      <h1 style={s.logo}>TOTEM</h1>
-      <form style={s.form} onSubmit={submit}>
-        <h2 style={s.title}>Iniciar sesión</h2>
-        <input style={s.input} type="email"    placeholder="Email"      value={email}    onChange={e => setEmail(e.target.value)}    required />
-        <input style={s.input} type="password" placeholder="Contraseña" value={password} onChange={e => setPassword(e.target.value)} required />
-        {error && <p style={s.error}>{error}</p>}
-        <button style={s.btn} type="submit" disabled={loading}>
-          {loading ? 'Entrando...' : 'Entrar'}
-        </button>
-        <p style={s.link}>¿No tienes cuenta? <Link to="/register" style={s.a}>Regístrate</Link></p>
-      </form>
+    <div style={{
+      minHeight: '100dvh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'var(--surface-sunken)',
+      padding: 'var(--space-4)',
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 400,
+        background: 'var(--surface-card)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-lg)',
+        padding: 'var(--space-7) var(--space-6)',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 'var(--space-7)' }}>
+          <span style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 'var(--weight-extrabold)',
+            fontSize: 'var(--text-2xl)',
+            color: 'var(--blue-900)',
+            letterSpacing: 'var(--tracking-caps)',
+            display: 'block',
+          }}>
+            TOTEM
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-body)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--text-muted)',
+            marginTop: 'var(--space-1)',
+            display: 'block',
+          }}>
+            Sistema aeropónico modular
+          </span>
+        </div>
+
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <h1 style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 'var(--weight-semibold)',
+            fontSize: 'var(--text-lg)',
+            color: 'var(--text-strong)',
+            marginBottom: 'var(--space-1)',
+          }}>
+            Iniciar sesión
+          </h1>
+
+          {error && <Alert tone="danger" onClose={() => setError(null)}>{error}</Alert>}
+
+          <Input
+            label="Correo electrónico"
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            autoComplete="email"
+            required
+          />
+          <Input
+            label="Contraseña"
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+
+          <Button type="submit" fullWidth disabled={loading} style={{ marginTop: 'var(--space-2)' }}>
+            {loading ? 'Entrando...' : 'Entrar'}
+          </Button>
+
+          <p style={{ textAlign: 'center', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            ¿No tienes cuenta?{' '}
+            <Link to="/register" style={{ color: 'var(--blue-700)', fontWeight: 'var(--weight-semibold)' }}>
+              Regístrate
+            </Link>
+          </p>
+        </form>
+      </div>
     </div>
   )
 }

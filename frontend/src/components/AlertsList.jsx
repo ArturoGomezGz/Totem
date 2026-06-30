@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api'
-
-const SEVERITY_COLOR = { critical: '#e74c3c', warning: '#f39c12' }
+import { Button, Alert, Badge } from '../design-system'
 
 function fmt(ts) {
   return new Date(ts).toLocaleString('es', {
@@ -10,11 +9,14 @@ function fmt(ts) {
   })
 }
 
+const SEVERITY_TONE = { critical: 'danger', warning: 'warning' }
+const FILTER_OPTS = [['active', 'Activas'], ['resolved', 'Resueltas'], ['all', 'Todas']]
+
 export default function AlertsList({ unitId }) {
-  const [alerts, setAlerts]   = useState([])
-  const [filter, setFilter]   = useState('active')
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState(null)
+  const [alerts, setAlerts]     = useState([])
+  const [filter, setFilter]     = useState('active')
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
   const [resolving, setResolving] = useState(null)
 
   const load = useCallback(() => {
@@ -42,16 +44,19 @@ export default function AlertsList({ unitId }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-        {[['active', 'Activas'], ['resolved', 'Resueltas'], ['all', 'Todas']].map(([val, label]) => (
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)' }}>
+        {FILTER_OPTS.map(([val, label]) => (
           <button
             key={val}
             onClick={() => setFilter(val)}
             style={{
-              padding: '5px 12px', borderRadius: '20px', fontSize: '12px', cursor: 'pointer',
-              border: `1px solid ${filter === val ? '#888' : '#333'}`,
-              background: filter === val ? '#2a2a2a' : 'transparent',
-              color: filter === val ? '#fff' : '#555',
+              padding: '6px 16px', borderRadius: 'var(--radius-pill)',
+              border: `1px solid ${filter === val ? 'var(--blue-700)' : 'var(--border-default)'}`,
+              background: filter === val ? 'var(--blue-050)' : 'var(--surface-card)',
+              color: filter === val ? 'var(--blue-700)' : 'var(--text-muted)',
+              fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
+              fontSize: 'var(--text-sm)', cursor: 'pointer',
+              transition: 'all var(--duration-base) var(--ease-standard)',
             }}
           >
             {label}
@@ -59,46 +64,55 @@ export default function AlertsList({ unitId }) {
         ))}
       </div>
 
-      {loading && <p style={{ color: '#555', fontSize: '13px' }}>Cargando...</p>}
-      {error   && <p style={{ color: '#e74c3c', fontSize: '13px' }}>{error}</p>}
+      {loading && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Cargando...</p>}
+      {error   && <Alert tone="danger" style={{ marginBottom: 'var(--space-4)' }}>{error}</Alert>}
       {!loading && alerts.length === 0 && (
-        <p style={{ color: '#555', fontSize: '13px' }}>Sin alertas.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Sin alertas.</p>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {alerts.map(a => (
-          <div key={a.id} style={{
-            background: '#1a1a1a',
-            border: `1px solid ${SEVERITY_COLOR[a.severity] ?? '#333'}22`,
-            borderLeft: `3px solid ${SEVERITY_COLOR[a.severity] ?? '#555'}`,
-            borderRadius: '10px', padding: '12px 14px',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '600', color: SEVERITY_COLOR[a.severity] ?? '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                {a.severity} · {a.type}
-              </span>
-              <span style={{ fontSize: '11px', color: '#555' }}>{fmt(a.timestamp)}</span>
-            </div>
-            {a.message && <p style={{ margin: 0, fontSize: '13px', color: '#aaa' }}>{a.message}</p>}
-            {a.resolved_at ? (
-              <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#27ae60' }}>
-                ✓ Resuelta {fmt(a.resolved_at)}
-              </p>
-            ) : (
-              <button
-                onClick={() => handleResolve(a.id)}
-                disabled={resolving === a.id}
-                style={{
-                  marginTop: '8px', padding: '3px 10px', fontSize: '11px',
-                  background: 'transparent', border: '1px solid #333',
-                  borderRadius: '6px', color: '#888', cursor: 'pointer',
-                }}
-              >
-                {resolving === a.id ? '...' : 'Resolver'}
-              </button>
-            )}
-          </div>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+        {alerts.map(a => {
+          const tone = SEVERITY_TONE[a.severity] ?? 'info'
+          return (
+            <Alert key={a.id} tone={tone}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-2)' }}>
+                <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                  <Badge tone={tone}>{a.severity}</Badge>
+                  <span style={{
+                    fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
+                    fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
+                    textTransform: 'uppercase', letterSpacing: 'var(--tracking-caps)',
+                  }}>
+                    {a.type}
+                  </span>
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                  {fmt(a.timestamp)}
+                </span>
+              </div>
+              {a.message && (
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)', marginBottom: 'var(--space-2)' }}>
+                  {a.message}
+                </p>
+              )}
+              {a.resolved_at ? (
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--green-600)', fontFamily: 'var(--font-body)' }}>
+                  Resuelta {fmt(a.resolved_at)}
+                </p>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleResolve(a.id)}
+                  disabled={resolving === a.id}
+                  style={{ marginTop: 'var(--space-1)' }}
+                >
+                  {resolving === a.id ? 'Resolviendo...' : 'Marcar como resuelta'}
+                </Button>
+              )}
+            </Alert>
+          )
+        })}
       </div>
     </div>
   )

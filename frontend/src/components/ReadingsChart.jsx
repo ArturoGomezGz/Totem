@@ -3,10 +3,10 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { api } from '../api'
 
 const SENSORS = [
-  { key: 'temperature', label: 'Temperatura', unit: '°C',   color: '#e74c3c' },
-  { key: 'humidity',    label: 'Humedad',      unit: '% RH', color: '#3498db' },
-  { key: 'light',       label: 'Luz PAR',      unit: 'µmol', color: '#f1c40f' },
-  { key: 'co2',         label: 'CO₂',          unit: 'ppm',  color: '#2ecc71' },
+  { key: 'temperature', label: 'Temperatura', unit: '°C',   color: 'var(--teal-500)',  hex: '#00A99D' },
+  { key: 'humidity',    label: 'Humedad',      unit: '% RH', color: 'var(--blue-700)',  hex: '#0077AA' },
+  { key: 'light',       label: 'Luz PAR',      unit: 'µmol', color: 'var(--lime-500)',  hex: '#8DC44A' },
+  { key: 'co2',         label: 'CO₂',          unit: 'ppm',  color: 'var(--ink-500)',   hex: '#5a6675' },
 ]
 
 function fmt(ts) {
@@ -34,48 +34,82 @@ export default function ReadingsChart({ unitId }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        {SENSORS.map(s => (
-          <button
-            key={s.key}
-            onClick={() => setSensor(s.key)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: '20px',
-              border: `1px solid ${sensor === s.key ? s.color : '#333'}`,
-              background: sensor === s.key ? s.color + '22' : 'transparent',
-              color: sensor === s.key ? s.color : '#666',
-              fontSize: '12px',
-              cursor: 'pointer',
-            }}
-          >
-            {s.label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
+        {SENSORS.map(s => {
+          const active = sensor === s.key
+          return (
+            <button
+              key={s.key}
+              onClick={() => setSensor(s.key)}
+              style={{
+                padding: '6px 16px', borderRadius: 'var(--radius-pill)',
+                border: `1px solid ${active ? s.hex : 'var(--border-default)'}`,
+                background: active ? `${s.hex}18` : 'var(--surface-card)',
+                color: active ? s.hex : 'var(--text-muted)',
+                fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
+                fontSize: 'var(--text-sm)', cursor: 'pointer',
+                transition: 'all var(--duration-base) var(--ease-standard)',
+              }}
+            >
+              {s.label}
+            </button>
+          )
+        })}
       </div>
 
-      {loading && <p style={{ color: '#555', fontSize: '13px' }}>Cargando...</p>}
-      {error   && <p style={{ color: '#e74c3c', fontSize: '13px' }}>{error}</p>}
+      {loading && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Cargando...</p>}
+      {error   && <p style={{ color: 'var(--status-danger)', fontSize: 'var(--text-sm)' }}>{error}</p>}
 
       {!loading && !error && data.length === 0 && (
-        <p style={{ color: '#555', fontSize: '13px' }}>Sin lecturas en las últimas 24 h.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
+          Sin lecturas en las últimas 24 h.
+        </p>
       )}
 
       {!loading && data.length > 0 && (
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#222" />
-            <XAxis dataKey="time" tick={{ fill: '#555', fontSize: 10 }} interval="preserveStartEnd" />
-            <YAxis tick={{ fill: '#555', fontSize: 10 }} unit={` ${current.unit}`} width={70} />
-            <Tooltip
-              contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: '12px' }}
-              labelStyle={{ color: '#888' }}
-              itemStyle={{ color: current.color }}
-              formatter={v => [`${v} ${current.unit}`, current.label]}
-            />
-            <Line type="monotone" dataKey="value" stroke={current.color} dot={false} strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
+        <div style={{
+          background: 'var(--surface-card)', border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-md)', padding: 'var(--space-4)',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={data} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eaeef2" />
+              <XAxis
+                dataKey="time"
+                tick={{ fill: '#8793a3', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
+                interval="preserveStartEnd"
+                axisLine={{ stroke: '#d9e0e7' }}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fill: '#8793a3', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
+                unit={` ${current.unit}`}
+                width={72}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: '#ffffff', border: '1px solid #d9e0e7',
+                  borderRadius: 8, fontSize: 13,
+                  fontFamily: 'Source Sans 3, sans-serif', boxShadow: '0 4px 12px rgba(0,58,92,0.10)',
+                }}
+                labelStyle={{ color: '#5a6675', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11 }}
+                itemStyle={{ color: current.hex }}
+                formatter={v => [`${v} ${current.unit}`, current.label]}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={current.hex}
+                dot={false}
+                strokeWidth={2}
+                activeDot={{ r: 4, fill: current.hex, strokeWidth: 0 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       )}
     </div>
   )
