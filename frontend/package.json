@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
+    "dev:mock": "vite --mode mock --host",
     "build": "vite build",
     "preview": "vite preview --host"
   },

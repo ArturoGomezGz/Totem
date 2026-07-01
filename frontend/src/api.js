@@ -1,3 +1,5 @@
+import { mockApi } from './mocks/api.mock'
+
 const BASE = '/api/v1'
 
 function getToken() {
@@ -40,7 +42,7 @@ async function request(method, path, body) {
   return data
 }
 
-export const api = {
+const realApi = {
   register:         (email, password)    => request('POST', '/auth/register', { email, password }),
   login:            (email, password)    => request('POST', '/auth/login',    { email, password }),
   refresh:          (refresh_token)      => request('POST', '/auth/refresh',   { refresh_token }),
@@ -54,6 +56,7 @@ export const api = {
   getUnit:          (unit_id)            => request('GET',  `/units/${unit_id}`),
   patchUnit:        (unit_id, body)      => request('PATCH', `/units/${unit_id}`, body),
   deactivateUnit:   (unit_id)            => request('DELETE', `/units/${unit_id}`),
+  regenerateUnitKey:(unit_id)            => request('POST', `/units/${unit_id}/regenerate-key`),
   getUnitState:     (unit_id)            => request('GET',  `/units/${unit_id}/state`),
 
   sendCommand:      (unit_id, type)      => request('POST', `/units/${unit_id}/commands`, { type }),
@@ -82,3 +85,5 @@ export const api = {
   deleteProfile: (id)                       => request('DELETE', `/profiles/${id}`),
   assignProfile: (unit_id, profile_id)      => request('PUT',    `/units/${unit_id}/profile`, { profile_id }),
 }
+
+export const api = import.meta.env.VITE_USE_MOCKS === 'true' ? mockApi : realApi

@@ -121,13 +121,6 @@ export default function ProfileFormPage() {
     <AppShell>
       <div style={{ maxWidth: 600 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
-          <button
-            onClick={() => navigate('/profiles')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)' }}
-          >
-            ← Perfiles
-          </button>
-          <span style={{ color: 'var(--border-default)' }}>/</span>
           <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)', fontSize: 'var(--text-xl)', color: 'var(--text-strong)', margin: 0 }}>
             {title}
           </h2>

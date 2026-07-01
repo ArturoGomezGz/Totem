@@ -1,7 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, clearTokens } from '../api'
-import { clearActiveOrgId } from '../utils/activeOrg'
 import { useOrg } from '../contexts/OrgContext'
 
 export default function Navbar({ right = null }) {
@@ -27,16 +25,6 @@ export default function Navbar({ right = null }) {
     setOpen(false)
   }
 
-  const logout = async () => {
-    const refresh_token = localStorage.getItem('refresh_token')
-    if (refresh_token) {
-      try { await api.logout(refresh_token) } catch { /* silencioso */ }
-    }
-    clearTokens()
-    clearActiveOrgId()
-    navigate('/login')
-  }
-
   return (
     <header style={{
       background: 'var(--blue-900)',
@@ -53,13 +41,17 @@ export default function Navbar({ right = null }) {
     }}>
 
       {/* Logo */}
-      <span style={{
-        fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-extrabold)',
-        fontSize: 'var(--text-lg)', color: 'var(--white)',
-        letterSpacing: 'var(--tracking-caps)', flexShrink: 0,
-      }}>
+      <button
+        onClick={() => navigate('/units')}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+          fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-extrabold)',
+          fontSize: 'var(--text-lg)', color: 'var(--white)',
+          letterSpacing: 'var(--tracking-caps)', flexShrink: 0,
+        }}
+      >
         TOTEM
-      </span>
+      </button>
 
       {/* Org dropdown */}
       <div ref={dropdownRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -148,11 +140,9 @@ export default function Navbar({ right = null }) {
         </div>
       )}
 
-      {/* Ajustes + Salir */}
+      {/* Ajustes */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0 }}>
         <button onClick={() => navigate('/settings')} style={navBtn}>Ajustes</button>
-        <span style={{ color: 'rgba(255,255,255,0.2)' }}>|</span>
-        <button onClick={logout} style={navBtn}>Salir</button>
       </div>
 
     </header>

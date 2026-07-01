@@ -348,6 +348,64 @@ def patch_unit(
     return _unit_to_out(unit, db)
 
 
+@router.post(
+    "/units/{unit_id}/regenerate-key",
+    summary="Regenerar la API key de una unidad",
+    description="""
+**¿Qué hace?**
+Genera una nueva `api_key` para la unidad y descarta la anterior de inmediato.
+
+**¿Para qué?**
+Permite recuperar el acceso a una unidad cuando la `api_key` original se perdió
+o se sospecha que se filtró, sin tener que dar de baja la unidad y crear una nueva.
+
+**¿Dónde se usa?**
+Vista de detalle de unidad — sección "API Key" en la pestaña de configuración.
+
+> **Importante:** la `api_key` anterior deja de ser válida de inmediato — el dispositivo
+> se desconectará del broker MQTT hasta que se reprovisione con la nueva clave.
+> Al igual que en el registro, la clave nueva solo se muestra una vez.
+""",
+    response_model=UnitCreatedOut,
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "Solo los administradores pueden regenerar la API key"},
+        404: {"description": "Unidad no encontrada"},
+    },
+    tags=["units"],
+)
+def regenerate_unit_key(
+    unit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    unit = _require_unit_access(unit_id, current_user, db)
+
+    membership = db.query(Membership).filter(
+        Membership.user_id == current_user.id,
+        Membership.organization_id == unit.organization_id,
+    ).first()
+    if not membership or membership.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo los administradores pueden regenerar la API key")
+
+    unit.api_key = secrets.token_hex(32)
+    db.commit()
+    db.refresh(unit)
+
+    return UnitCreatedOut(
+        id=str(unit.id),
+        organization_id=str(unit.organization_id),
+        type=unit.type,
+        name=unit.name,
+        is_active=unit.is_active,
+        firmware_version=unit.firmware_version,
+        last_seen=unit.last_seen,
+        created_at=unit.created_at,
+        active_profile_id=_active_profile_id(unit, db),
+        api_key=unit.api_key,
+    )
+
+
 @router.delete(
     "/units/{unit_id}",
     summary="Desactivar una unidad (soft delete)",

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api, clearTokens } from '../api'
+import { clearActiveOrgId } from '../utils/activeOrg'
 import { Button, Card, Alert, Badge, Select } from '../design-system'
 import AppShell from '../components/AppShell'
 import TelegramLink from '../components/TelegramLink'
@@ -54,6 +56,16 @@ export default function SettingsPage() {
   const handleOrgSwitch = () => {
     switchOrg(selectedOrgId)
     navigate('/units')
+  }
+
+  const logout = async () => {
+    const refresh_token = localStorage.getItem('refresh_token')
+    if (refresh_token) {
+      try { await api.logout(refresh_token) } catch { /* silencioso */ }
+    }
+    clearTokens()
+    clearActiveOrgId()
+    navigate('/login')
   }
 
   return (
@@ -137,6 +149,15 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             <DisabledRow label="Cambiar contraseña" hint="Actualiza la contraseña de acceso a tu cuenta." />
             <DisabledRow label="Cambiar correo electrónico" hint="Modifica la dirección de correo asociada a tu cuenta." />
+          </div>
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <Button
+              variant="outline" size="sm"
+              style={{ borderColor: 'var(--status-danger)', color: 'var(--status-danger)' }}
+              onClick={logout}
+            >
+              Cerrar sesión
+            </Button>
           </div>
         </Section>
 

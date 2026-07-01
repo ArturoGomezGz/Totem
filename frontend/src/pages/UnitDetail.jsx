@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { api } from '../api'
-import { Button, Card, StatCard, Badge, Alert, Select, Tabs } from '../design-system'
+import { Button, Card, StatCard, Badge, Alert, Tabs } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useUnitWebSocket } from '../hooks/useUnitWebSocket'
 import { useOrg } from '../contexts/OrgContext'
 import ReadingsChart from '../components/ReadingsChart'
 import EventsList from '../components/EventsList'
 import AlertsList from '../components/AlertsList'
+import UnitSettingsPanel from '../components/UnitSettingsPanel'
 
 const CMD_LOCK_MS = 8000
 const TABS = [
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'readings', label: 'Lecturas' },
   { id: 'events',   label: 'Eventos'  },
   { id: 'alerts',   label: 'Alertas'  },
+  { id: 'settings', label: 'Configuración' },
 ]
 
 const SENSOR_ACCENTS = {
@@ -26,7 +28,6 @@ const SENSOR_ACCENTS = {
 
 export default function UnitDetail() {
   const { unitId }       = useParams()
-  const navigate         = useNavigate()
   const { activeOrgId }  = useOrg()
 
   const { unit, wsConnected, isOffline } = useUnitWebSocket(unitId)
@@ -38,17 +39,10 @@ export default function UnitDetail() {
   const [tab, setTab]                 = useState('live')
   const pendingTimer                  = useRef(null)
 
-  const [profiles, setProfiles]                   = useState([])
-  const [selectedProfileId, setSelectedProfileId] = useState('')
-  const [assignMsg, setAssignMsg]                 = useState(null)
-  const [assignError, setAssignError]             = useState(null)
-  const [assignLoading, setAssignLoading]         = useState(false)
+  const [profiles, setProfiles] = useState([])
 
   useEffect(() => {
-    api.getUnit(unitId).then(meta => {
-      setUnitMeta(meta)
-      if (meta?.active_profile_id) setSelectedProfileId(meta.active_profile_id)
-    }).catch(() => {})
+    api.getUnit(unitId).then(setUnitMeta).catch(() => {})
   }, [unitId])
 
   useEffect(() => {
@@ -79,17 +73,9 @@ export default function UnitDetail() {
     }
   }
 
-  const handleAssignProfile = async () => {
-    setAssignMsg(null); setAssignError(null); setAssignLoading(true)
-    try {
-      const res = await api.assignProfile(unitId, selectedProfileId || null)
-      setAssignMsg(res?.detail ?? 'Perfil asignado')
-    } catch (err) {
-      setAssignError(err.message)
-    } finally {
-      setAssignLoading(false)
-    }
-  }
+  const activeProfile = unitMeta?.active_profile_id
+    ? profiles.find(p => p.id === unitMeta.active_profile_id)
+    : null
 
   const on        = unit?.pump_on ?? false
   const r         = unit?.readings
@@ -109,22 +95,17 @@ export default function UnitDetail() {
   return (
     <AppShell wide navRight={connectionBadge}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
-        <button
-          onClick={() => navigate('/units')}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            color: 'var(--text-muted)', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
-          }}
-        >
-          ← Unidades
-        </button>
-        <span style={{ color: 'var(--border-default)' }}>/</span>
         <h2 style={{
           fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
           fontSize: 'var(--text-xl)', color: 'var(--text-strong)', margin: 0,
         }}>
           {unitMeta?.name ?? 'Cargando...'}
         </h2>
+        {unitMeta?.type === 'totem' && (
+          <Badge tone={activeProfile ? 'blue' : 'neutral'}>
+            {activeProfile ? activeProfile.name : 'Sin perfil'}
+          </Badge>
+        )}
       </div>
 
       <Tabs tabs={TABS} value={tab} onChange={setTab} style={{ marginBottom: 'var(--space-6)' }} />
@@ -167,38 +148,15 @@ export default function UnitDetail() {
               Esperando datos del dispositivo...
             </p>
           )}
-
-          <Card>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
-              fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: 'var(--tracking-caps)',
-              display: 'block', marginBottom: 'var(--space-4)',
-            }}>
-              Perfil activo
-            </span>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end' }}>
-              <Select
-                style={{ flex: 1 }}
-                value={selectedProfileId}
-                onChange={e => { setSelectedProfileId(e.target.value); setAssignMsg(null); setAssignError(null) }}
-              >
-                <option value="">Sin perfil</option>
-                {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
-              <Button variant="primary" size="md" onClick={handleAssignProfile} disabled={assignLoading} style={{ flexShrink: 0 }}>
-                {assignLoading ? '...' : 'Asignar'}
-              </Button>
-            </div>
-            {assignMsg   && <Alert tone="success" style={{ marginTop: 'var(--space-3)' }}>{assignMsg}</Alert>}
-            {assignError && <Alert tone="danger"  style={{ marginTop: 'var(--space-3)' }}>{assignError}</Alert>}
-          </Card>
         </div>
       )}
 
       {tab === 'readings' && <ReadingsChart unitId={unitId} />}
       {tab === 'events'   && <EventsList   unitId={unitId} />}
       {tab === 'alerts'   && <AlertsList   unitId={unitId} />}
+      {tab === 'settings' && unitMeta && (
+        <UnitSettingsPanel unit={unitMeta} profiles={profiles} onUnitChange={setUnitMeta} />
+      )}
     </AppShell>
   )
 }

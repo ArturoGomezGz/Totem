@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { Button, Alert, Input, Select, Card } from '../design-system'
+import { Button, Alert, Input, Select } from '../design-system'
 import AppShell from '../components/AppShell'
+import ProvisioningPanel from '../components/ProvisioningPanel'
 import { useOrg } from '../contexts/OrgContext'
 
 export default function NewUnitPage() {
@@ -11,6 +12,9 @@ export default function NewUnitPage() {
 
   const [name, setName]       = useState('')
   const [type, setType]       = useState('totem')
+  const [wifiSsid, setWifiSsid] = useState('')
+  const [wifiPass, setWifiPass] = useState('')
+  const [mqttUri, setMqttUri]   = useState('')
   const [error, setError]     = useState(null)
   const [loading, setLoading] = useState(false)
   const [created, setCreated] = useState(null)
@@ -41,31 +45,12 @@ export default function NewUnitPage() {
           <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-5)' }}>
             La unidad <strong>{created.name}</strong> fue creada correctamente.
           </p>
-          <Alert tone="warning" title="Guarda la API Key — solo se muestra una vez" style={{ marginBottom: 'var(--space-5)' }}>
-            Copia esta clave y flashéala en el dispositivo antes de salir de esta página.
-          </Alert>
-          <Card style={{ marginBottom: 'var(--space-5)' }}>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
-              fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: 'var(--tracking-caps)',
-              display: 'block', marginBottom: 'var(--space-3)',
-            }}>
-              API Key
-            </span>
-            <code style={{
-              display: 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
-              color: 'var(--blue-900)', wordBreak: 'break-all',
-              background: 'var(--blue-050)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-4)',
-            }}>
-              {created.api_key}
-            </code>
-            <Button size="sm" variant="outline" style={{ marginTop: 'var(--space-3)' }}
-              onClick={() => navigator.clipboard?.writeText(created.api_key)}>
-              Copiar
-            </Button>
-          </Card>
-          <Button variant="primary" onClick={() => navigate('/units')}>
+          <ProvisioningPanel
+            unitId={created.id} apiKey={created.api_key}
+            initialWifiSsid={wifiSsid} initialWifiPass={wifiPass}
+            initialMqttUri={mqttUri || undefined}
+          />
+          <Button variant="primary" style={{ marginTop: 'var(--space-5)' }} onClick={() => navigate('/units')}>
             Ir a unidades
           </Button>
         </div>
@@ -77,13 +62,6 @@ export default function NewUnitPage() {
     <AppShell>
       <div style={{ maxWidth: 480 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
-          <button
-            onClick={() => navigate('/units')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)' }}
-          >
-            ← Unidades
-          </button>
-          <span style={{ color: 'var(--border-default)' }}>/</span>
           <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)', fontSize: 'var(--text-xl)', color: 'var(--text-strong)', margin: 0 }}>
             Registrar unidad
           </h2>
@@ -101,6 +79,22 @@ export default function NewUnitPage() {
             <option value="totem">Totem</option>
             <option value="supply_tank">Tanque de suministro</option>
           </Select>
+
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-4)', marginTop: 'var(--space-2)' }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
+              Datos de red del dispositivo (opcional). Se usan solo para generar el archivo{' '}
+              <code>nvs_config.csv</code> listo para flashear — no se envían al servidor.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              <Input label="SSID WiFi" value={wifiSsid} onChange={e => setWifiSsid(e.target.value)} />
+              <Input label="Contraseña WiFi" type="password" value={wifiPass} onChange={e => setWifiPass(e.target.value)} />
+              <Input
+                label="MQTT URI" value={mqttUri} onChange={e => setMqttUri(e.target.value)}
+                hint="Ej: mqtt://192.168.1.50:1883 — IP local de tu server"
+              />
+            </div>
+          </div>
+
           <div style={{ display: 'flex', gap: 'var(--space-3)', paddingTop: 'var(--space-2)' }}>
             <Button type="submit" disabled={loading}>
               {loading ? 'Registrando...' : 'Registrar unidad'}

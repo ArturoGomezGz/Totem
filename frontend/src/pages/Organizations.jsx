@@ -43,7 +43,12 @@ export default function Organizations() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         {orgs.map(org => (
-          <Card key={org.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Card
+            key={org.id}
+            interactive
+            onClick={() => handleEnter(org)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+          >
             <div>
               <p style={{
                 fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
@@ -53,9 +58,7 @@ export default function Organizations() {
               </p>
               <Badge tone="neutral">{org.role}</Badge>
             </div>
-            <Button variant="primary" size="sm" onClick={() => handleEnter(org)}>
-              Seleccionar
-            </Button>
+            <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1 }}>›</span>
           </Card>
         ))}
       </div>

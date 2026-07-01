@@ -11,15 +11,19 @@ export default function Units() {
   const navigate                   = useNavigate()
   const { activeOrgId, activeOrg } = useOrg()
 
-  const [units, setUnits] = useState([])
-  const [error, setError] = useState(null)
+  const [units, setUnits]       = useState([])
+  const [profiles, setProfiles] = useState([])
+  const [error, setError]       = useState(null)
 
   useEffect(() => {
     if (!activeOrgId) return
     api.getUnits(activeOrgId)
       .then(data => { setUnits(data); setError(null) })
       .catch(err => setError(err.message))
+    api.getProfiles(activeOrgId).then(setProfiles).catch(() => {})
   }, [activeOrgId])
+
+  const profileName = (id) => profiles.find(p => p.id === id)?.name
 
   if (!activeOrgId) {
     return (
@@ -96,8 +100,13 @@ export default function Units() {
               }}>
                 {unit.name}
               </p>
-              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
                 <Badge tone="neutral">{TYPE_LABEL[unit.type] ?? unit.type}</Badge>
+                {unit.type === 'totem' && (
+                  <Badge tone={unit.active_profile_id ? 'blue' : 'neutral'}>
+                    {unit.active_profile_id ? (profileName(unit.active_profile_id) ?? '...') : 'Sin perfil'}
+                  </Badge>
+                )}
               </div>
             </div>
             <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1 }}>›</span>

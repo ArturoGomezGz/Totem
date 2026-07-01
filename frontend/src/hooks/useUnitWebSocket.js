@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { useUnitWebSocketMock } from '../mocks/useUnitWebSocket.mock'
 
 const OFFLINE_MS = 35000
 const WS_RECONNECT_MS = 3000
 
-export function useUnitWebSocket(unitId) {
+function useUnitWebSocketReal(unitId) {
   const [unit, setUnit] = useState(null)
   const [wsConnected, setWsConnected] = useState(false)
   const [error, setError] = useState(null)
@@ -64,3 +65,7 @@ export function useUnitWebSocket(unitId) {
 
   return { unit, wsConnected, isOffline, error }
 }
+
+export const useUnitWebSocket = import.meta.env.VITE_USE_MOCKS === 'true'
+  ? useUnitWebSocketMock
+  : useUnitWebSocketReal
