@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,7 +22,7 @@ class RegisterIn(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: str
+    id: uuid.UUID
     email: str
     created_at: datetime
 

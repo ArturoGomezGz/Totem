@@ -33,10 +33,10 @@ async function request(method, path, body) {
     return
   }
 
-  const data = res.status === 204 ? null : await res.json()
+  const data = res.status === 204 ? null : await res.json().catch(() => null)
 
   if (!res.ok) {
-    throw new Error(data?.detail || `HTTP ${res.status}`)
+    throw new Error(data?.detail || `Error del servidor (${res.status})`)
   }
 
   return data
