@@ -87,6 +87,7 @@ Stack deployment-agnostic. La misma codebase corre en Raspberry Pi, VPS o cloud 
 | Sensor de nivel de tanque | Dos flotadores digitales: uno a ~30% (alerta) y otro a ~90% (tope de llenado). No se almacenan en `readings` — solo generan alertas y controlan la válvula. | 22 jun 2026 |
 | Válvula solenoide NC (MVP) | Válvula normalmente cerrada en la entrada de agua del tanque. Se abre cuando el flotador del 30% está en aire; se cierra cuando el del 90% se activa. Agnóstica a la fuente de agua (tanque elevado, llave, manguera). Falla segura: sin corriente = cerrada. | 22 jun 2026 |
 | LEDs de indicación (MVP) | Dos LEDs en la unidad física: rojo (nivel bajo, flotador 30% en aire) y verde (tanque lleno, flotador 90% sumergido). Sin lógica adicional. | 22 jun 2026 |
+| Gestión de firmware | `firmware_releases` privada por organización (cada org sube y versiona sus propios compilados). Aplicar un release a una unidad o a toda la organización reutiliza `commands` (`type = update_firmware`), sin tabla de deployments nueva. `units.target_firmware_release_id` distingue versión deseada vs. `firmware_version` reportada. Ver `capa2/schema.md`. | 2 jul 2026 |
 
 ## Decisiones pendientes
 
@@ -101,7 +102,7 @@ Estas preguntas bloquean la implementación del firmware:
 - **Confirmación de ejecución de comandos** — El ESP32 recibe el comando via MQTT (QoS 1 garantiza entrega), pero ¿reporta el resultado de ejecución? Si `pump_on` falla, ¿publica una alerta o un ACK de fallo?
 - **Comportamiento en primer arranque (factory state)** — Sin perfil en flash, ¿qué hace el ESP32? ¿Espera recibir el perfil via MQTT antes del primer ciclo de riego? ¿Tiene parámetros de emergencia por defecto?
 - **Frescura del perfil cacheado** — ¿Tiene TTL el caché en flash? Si el ESP32 lleva semanas offline, ¿el perfil cacheado sigue siendo válido indefinidamente?
-- **OTA** — La notificación llega por MQTT; la descarga del binario es HTTP. ¿Verificación de firma criptográfica además del hash?
+- **OTA** — La notificación llega por MQTT; la descarga del binario es HTTP. ¿Verificación de firma criptográfica además del hash? (La gestión de releases por organización y el mecanismo de aplicación a unidad/organización ya están cerrados — ver tabla de decisiones arriba y `capa2/schema.md`.)
 - **Manejo de fallo de autenticación MQTT** — Si el broker rechaza las credenciales del ESP32, ¿qué hace? ¿Reintenta, entra en modo solo-local indefinido?
 
 ### ML

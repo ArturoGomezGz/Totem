@@ -10,7 +10,9 @@ services:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      # El esquema ya no se inyecta aquí — lo crean las migraciones Alembic
+      # al arrancar el servicio api (ver docs/capa2/migraciones-alembic.md).
+      # Seed de desarrollo opcional: db/seed.dev.sql (aplicar manualmente).
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]

@@ -93,4 +93,13 @@ No implementar estas áreas sin haber cerrado la decisión correspondiente. Ver 
 
 ## Estado actual
 
-Etapa de diseño — no hay código todavía. Stack técnico y contrato de API definidos (ver `docs/`). Las decisiones pendientes del firmware listadas arriba bloquean su implementación. El punto de partida recomendado es el simulador de sensores, ya que desbloquea el desarrollo del server y el dashboard sin necesitar hardware ni resolver las decisiones del firmware.
+Implementación en curso — ya no es solo diseño. Existen y funcionan:
+
+- **`server/`** — FastAPI completo: auth (JWT + refresh), organizaciones/membresías, unidades, perfiles de cultivo, comandos manuales, alertas, bot de Telegram, WebSocket de estado en vivo, gestión de firmware (`routers/firmware.py`), y el endpoint interno de autenticación MQTT (`mosquitto-go-auth`).
+- **Base de datos** — TimescaleDB gestionada con migraciones Alembic (`server/alembic/`). El contenedor `api` aplica `alembic upgrade head` al arrancar; los cambios de esquema se hacen creando una migración nueva, nunca con SQL manual. Ver `docs/capa2/migraciones-alembic.md`.
+- **`frontend/`** — dashboard React con diseño CIBNOR DS: login/registro, organizaciones, unidades (alta, detalle, provisioning), perfiles de cultivo, vinculación de Telegram, vista en vivo, entorno de mocks para desarrollar sin backend.
+- **`firmware/simulator/`** y **`simulator/`** — firmware ESP32 simulado (bomba, modelo dinámico de temperatura, alertas) y simulador Python, ambos hablando MQTT con el server igual que un ESP32 real.
+
+Lo que sigue pendiente es firmware real para ESP32 físico (hoy solo existe el simulador) y las decisiones de interfaz firmware↔server listadas arriba, que bloquean esa migración de simulador a hardware.
+
+**Antes de asumir el estado de una parte del sistema, revisa el código en `server/` (incluido `server/alembic/versions/` para el esquema de DB), `frontend/`, `firmware/` y `simulator/` en vez de guiarte solo por este archivo o por `docs/` — la documentación puede quedar desactualizada respecto a la implementación real.**

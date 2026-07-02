@@ -47,6 +47,9 @@ class Unit(Base):
     api_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     firmware_version: Mapped[Optional[str]] = mapped_column(String)
+    target_firmware_release_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("firmware_releases.id")
+    )
     last_seen: Mapped[Optional[datetime]] = mapped_column(TIMESTAMPTZ)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
 
@@ -137,9 +140,13 @@ class RefreshToken(Base):
 class FirmwareRelease(Base):
     __tablename__ = "firmware_releases"
 
-    version: Mapped[str] = mapped_column(String, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    version: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
     binary_path: Mapped[str] = mapped_column(String, nullable=False)
     sha256: Mapped[str] = mapped_column(String, nullable=False)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     released_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
 
 

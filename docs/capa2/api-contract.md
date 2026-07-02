@@ -33,7 +33,7 @@ MQTT no es adecuado para payloads binarios grandes. La notificación llega por M
 
 | Método | Endpoint | Descripción |
 |---|---|---|
-| `GET` | `/api/v1/firmware/{version}/binary` | Descarga el binario compilado del firmware |
+| `GET` | `/api/v1/firmware/{firmware_release_id}/binary` | Descarga el binario compilado del firmware. Se referencia por `id`, no por `version` — `version` ya no es único globalmente, solo dentro de la organización (ver `capa2/schema.md`) |
 
 ---
 
@@ -53,6 +53,10 @@ Todos los endpoints usan el prefijo `/api/v1/`. Ver decisión y justificación d
 | `PUT`  | `/api/v1/profiles/{profile_id}` | Editar perfil de cultivo |
 | `PUT`  | `/api/v1/units/{unit_id}/profile` | Asignar perfil activo — el server lo publica al topic MQTT del dispositivo |
 | `GET`  | `/api/v1/alerts` | Historial de alertas (con filtros por unidad y estado) |
+| `GET`  | `/api/v1/firmware` | Listar releases de firmware de la organización |
+| `POST` | `/api/v1/firmware` | Subir un nuevo compilado (binario + versión + descripción) — solo admins |
+| `POST` | `/api/v1/units/{unit_id}/firmware` | Aplicar un release a una unidad — crea el `command` `update_firmware` y actualiza `target_firmware_release_id` |
+| `POST` | `/api/v1/organizations/{organization_id}/firmware` | Aplicar un release a todas las unidades tipo `totem` de la organización (fan-out) |
 | `POST` | `/api/v1/auth/login` | Login de usuario — devuelve JWT + refresh token |
 
 ---
