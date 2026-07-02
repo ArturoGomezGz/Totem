@@ -2,7 +2,7 @@
 
 TimescaleDB (extensión de PostgreSQL). Stack completo en `docs/capa2/stack.md`.
 
-**Estado:** cerrado · 24 jun 2026 · revisado 25 jun 2026 (normalización y constraints)
+**Estado:** cerrado · 24 jun 2026 · revisado 25 jun 2026 (normalización y constraints) · revisado 2 jul 2026 (gestión de firmware por organización)
 
 ---
 
@@ -53,6 +53,7 @@ Tabla base genérica para cualquier tipo de unidad del sistema. Campos específi
 | `api_key` | VARCHAR UNIQUE NOT NULL | Contraseña MQTT del dispositivo — no es un token de API REST |
 | `is_active` | BOOLEAN NOT NULL DEFAULT true | False = unidad revocada, Mosquitto rechaza la conexión |
 | `firmware_version` | VARCHAR | Última versión reportada por el dispositivo |
+| `target_firmware_release_id` | UUID FK → firmware_releases | Nullable — versión que el admin quiere que la unidad ejecute. Distinto de `firmware_version` (lo que el dispositivo reporta tener instalado). El dashboard compara ambos para mostrar "al día" / "actualización pendiente" |
 | `last_seen` | TIMESTAMPTZ | Último ciclo de comunicación exitoso |
 | `created_at` | TIMESTAMPTZ NOT NULL | |
 
@@ -135,8 +136,8 @@ Historial de comandos enviados por unidad. Con MQTT los comandos se entregan por
 | `id` | UUID PK | |
 | `unit_id` | UUID FK → units | |
 | `issued_by` | UUID FK → users | Usuario que emitió el comando |
-| `type` | VARCHAR NOT NULL | `pump_on`, `pump_off`, `pause_autonomous`, `update_profile`, `valve_open`, `valve_close` |
-| `payload` | JSONB | Parámetros del comando |
+| `type` | VARCHAR NOT NULL | `pump_on`, `pump_off`, `pause_autonomous`, `update_profile`, `valve_open`, `valve_close`, `update_firmware` |
+| `payload` | JSONB | Parámetros del comando. Para `update_firmware`: `{"firmware_release_id": "...", "version": "..."}` — el server resuelve `binary_path`/`sha256` desde `firmware_releases` al momento de publicar al topic `totem/{unit_id}/ota` |
 | `created_at` | TIMESTAMPTZ NOT NULL | |
 | `delivered_at` | TIMESTAMPTZ | Timestamp de publicación MQTT exitosa al broker |
 
@@ -166,13 +167,17 @@ Sesiones de larga duración. Permite invalidar sesiones individuales sin esperar
 
 ### `firmware_releases`
 
-Metadatos de versiones de firmware publicadas para OTA. El binario `.bin` vive en el filesystem del server (volumen Docker); la DB guarda solo los metadatos.
+Metadatos de versiones de firmware publicadas para OTA. El binario `.bin` vive en el filesystem del server (volumen Docker); la DB guarda solo los metadatos. Los releases son privados por organización — cada organización sube y gestiona sus propios compilados.
 
 | Campo | Tipo | Notas |
 |---|---|---|
-| `version` | VARCHAR PK | Versión semántica — ej. `1.2.0` |
-| `binary_path` | VARCHAR NOT NULL | Path relativo al binario en el filesystem del server — ej. `data/firmware/totem-v1.2.0.bin` |
+| `id` | UUID PK | |
+| `organization_id` | UUID FK → organizations NOT NULL | |
+| `version` | VARCHAR NOT NULL | Versión semántica — ej. `1.2.0`. Única dentro de la organización, no globalmente (`UNIQUE (organization_id, version)`) |
+| `description` | TEXT | Nullable — notas libres del admin sobre el release (ej. "fix de lectura de CO₂", "cambio de intervalo de ciclo"). Ayuda al usuario a distinguir versiones en el dashboard |
+| `binary_path` | VARCHAR NOT NULL | Path relativo al binario en el filesystem del server — ej. `data/firmware/{organization_id}/totem-v1.2.0.bin` |
 | `sha256` | VARCHAR NOT NULL | Hash SHA-256 del binario para verificación de integridad en el ESP32 |
+| `uploaded_by` | UUID FK → users | Admin que subió el compilado |
 | `released_at` | TIMESTAMPTZ NOT NULL | |
 
 ---
@@ -188,12 +193,12 @@ users
   │           │     ├── readings       (1 unidad → N lecturas)
   │           │     ├── device_events  (1 unidad → N eventos de actuadores)
   │           │     ├── commands       (1 unidad → N comandos, issued_by → users)
-  │           │     └── alerts         (1 unidad → N alertas)
-  │           └── crop_profiles (privados por organización)
-  │                 └── totem_configs (perfil activo por totem)
+  │           │     ├── alerts         (1 unidad → N alertas)
+  │           │     └── target_firmware_release_id → firmware_releases
+  │           ├── crop_profiles (privados por organización)
+  │           │     └── totem_configs (perfil activo por totem)
+  │           └── firmware_releases (privados por organización, uploaded_by → users)
   └── refresh_tokens (sesiones de larga duración)
-
-firmware_releases (global — no pertenece a una organización)
 ```
 
 ---
@@ -213,6 +218,19 @@ El nivel del tanque se gestiona únicamente a través de alertas y control de la
 | En aire | En aire | Bajo (< 30%) | Válvula abierta, LED rojo, alerta Telegram |
 
 Las lecturas de los flotadores no viajan en el payload de `/readings` — el ESP32 actúa localmente de forma inmediata y genera una alerta via `/alerts` solo cuando el flotador del 30% se activa.
+
+### Gestión de firmware por organización
+
+**Decisión — 2 jul 2026.** `firmware_releases` pasa de ser una tabla global a ser privada por organización: cada organización compila y sube sus propios binarios, así que dos organizaciones pueden publicar cada una una versión `1.2.0` sin colisionar entre sí. Por eso la PK deja de ser `version` y pasa a un `id` propio con `UNIQUE (organization_id, version)`.
+
+**Aplicar un release a una unidad o a toda la organización no requiere una tabla nueva de despliegues.** Se reutiliza el mecanismo de `commands` que ya existe para el resto de acciones fire-and-forget (pump_on, update_profile, etc.):
+
+1. El admin sube un compilado → `firmware_releases` (con `description` para que el dashboard distinga versiones sin que el usuario tenga que interpretar el número de versión).
+2. El admin aplica ese release a una unidad, o a todas las unidades tipo `totem` de la organización → por cada unidad afectada se crea una fila en `commands` con `type = update_firmware` y se actualiza `units.target_firmware_release_id`.
+3. El server publica la notificación OTA al topic MQTT `totem/{unit_id}/ota` (versión, URL de descarga, hash) y marca `commands.delivered_at` al publicar exitosamente — igual que cualquier otro comando.
+4. Cuando el ESP32 reporta la nueva versión instalada, `units.firmware_version` se actualiza. El dashboard compara `firmware_version` (real) contra `target_firmware_release_id` (deseado) para mostrar "al día" o "actualización pendiente", sin tener que interpretar el historial de `commands`.
+
+Aplicar a "toda la organización" es una operación de la aplicación (fan-out sobre las unidades activas tipo `totem` de esa organización), no un concepto nuevo en el schema — evita introducir una tabla de "scope" (unit vs. organization) que solo serviría para reconstruir algo que ya es derivable iterando `units`.
 
 ---
 
@@ -238,6 +256,8 @@ Revisión exhaustiva realizada el 25 jun 2026. El esquema cumple 1NF, 2NF y 3NF.
 
 Análogamente, `totem_configs` solo debe crearse para unidades con `type = 'totem'`. Tampoco expresable con FK — la aplicación lo garantiza.
 
+El mismo patrón aplica a `units.target_firmware_release_id → firmware_releases`: la aplicación debe verificar que `firmware_releases.organization_id = units.organization_id` antes de asignar un release como objetivo de una unidad. Este check debe ejecutarse en el endpoint que aplica firmware a una unidad o a toda la organización (ver `capa2/api-contract.md`).
+
 ### Constraints añadidos en el SQL (ausentes en el diseño original)
 
 | Tabla | Constraint | Valores válidos / regla |
@@ -246,9 +266,10 @@ Análogamente, `totem_configs` solo debe crearse para unidades con `type = 'tote
 | `units` | `CHECK (type IN (...))` | `totem`, `supply_tank` |
 | `device_events` | `CHECK (type IN (...))` | `pump_on`, `pump_off`, `valve_open`, `valve_close` |
 | `device_events` | `CHECK (trigger IN (...))` | `autonomous`, `override` |
-| `commands` | `CHECK (type IN (...))` | los seis tipos definidos |
+| `commands` | `CHECK (type IN (...))` | los siete tipos definidos |
 | `alerts` | `CHECK (severity IN (...))` | `critical`, `warning` |
 | `crop_profiles` | `CHECK (temp_min <= temp_max)` etc. | rangos coherentes para cada variable (solo cuando ambos extremos están presentes) |
+| `firmware_releases` | `UNIQUE (organization_id, version)` | la misma cadena de versión puede repetirse entre organizaciones distintas, no dentro de la misma |
 | varias | `CHECK (campo <> '')` | campos VARCHAR NOT NULL no pueden ser string vacío |
 
 `alerts.type` permanece libre (sin CHECK) por diseño — los tipos de alerta evolucionan sin migraciones.
@@ -280,6 +301,8 @@ El historial de auditoría debe permanecer intacto. Si se requiere anonimizar un
 | `commands → units` | CASCADE | Ídem |
 | `commands → users` | RESTRICT | Auditoría — ver nota arriba |
 | `alerts → units` | CASCADE | Ídem |
+| `firmware_releases → organizations` | RESTRICT | No borrar una org que todavía tiene releases publicados |
+| `units → firmware_releases` (`target_firmware_release_id`) | SET NULL | Si el release se borra, la unidad queda sin objetivo (nullable) |
 | `refresh_tokens → users` | CASCADE | Si el usuario se borra, sus tokens desaparecen |
 
 ### Índices
@@ -299,6 +322,8 @@ El historial de auditoría debe permanecer intacto. Si se requiere anonimizar un
 | `idx_alerts_unit_timestamp` | `alerts` | Historial de alertas por unidad |
 | `idx_alerts_timestamp` | `alerts` | Vista global de alertas recientes |
 | `idx_alerts_telegram_pending` | `alerts` | Cola de notificaciones Telegram pendientes |
+| `idx_firmware_releases_organization_id` | `firmware_releases` | Listar releases de una org |
+| `idx_units_target_firmware_release_id` | `units` | Encontrar unidades pendientes de actualizar a un release dado |
 | `idx_refresh_tokens_user_id` | `refresh_tokens` | Logout de todas las sesiones de un usuario |
 
 ### TimescaleDB — chunk_time_interval
