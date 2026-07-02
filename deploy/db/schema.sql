@@ -252,7 +252,7 @@ CREATE TABLE commands (
     delivered_at TIMESTAMPTZ,
 
     CONSTRAINT commands_type_valid CHECK (
-        type IN ('pump_on', 'pump_off', 'pause_autonomous', 'update_profile', 'valve_open', 'valve_close')
+        type IN ('pump_on', 'pump_off', 'pause_autonomous', 'update_profile', 'valve_open', 'valve_close', 'update_firmware')
     )
 );
 
@@ -316,21 +316,51 @@ CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 -- ---------------------------------------------------------------------------
 -- firmware_releases
 -- ---------------------------------------------------------------------------
--- Metadatos de versiones de firmware para OTA.
+-- Metadatos de versiones de firmware para OTA. Privada por organización:
+-- cada organización compila y sube sus propios binarios, así que la misma
+-- cadena de version puede repetirse entre organizaciones distintas.
 -- El binario .bin vive en el filesystem del server (volumen Docker montado
--- en data/firmware/). La DB guarda solo los metadatos.
+-- en data/firmware/{organization_id}/). La DB guarda solo los metadatos.
+-- ---------------------------------------------------------------------------
+-- ON DELETE RESTRICT en organization_id: no se borra una org con releases
+-- publicados. ON DELETE RESTRICT en uploaded_by: mismo criterio de auditoría
+-- que commands.issued_by — no se pierde el registro de quién subió qué.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE firmware_releases (
-    version     VARCHAR     PRIMARY KEY,
-    binary_path VARCHAR     NOT NULL,
-    sha256      VARCHAR     NOT NULL,
-    released_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID        NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    version         VARCHAR     NOT NULL,
+    description     TEXT,
+    binary_path     VARCHAR     NOT NULL,
+    sha256          VARCHAR     NOT NULL,
+    uploaded_by     UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    released_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT firmware_releases_version_not_empty     CHECK (version <> ''),
     CONSTRAINT firmware_releases_binary_path_not_empty CHECK (binary_path <> ''),
-    CONSTRAINT firmware_releases_sha256_not_empty      CHECK (sha256 <> '')
+    CONSTRAINT firmware_releases_sha256_not_empty      CHECK (sha256 <> ''),
+    CONSTRAINT firmware_releases_org_version_unique    UNIQUE (organization_id, version)
 );
+
+-- Listar releases de una organización (GET /api/v1/firmware?organization_id=...)
+CREATE INDEX idx_firmware_releases_organization_id ON firmware_releases(organization_id);
+
+-- ---------------------------------------------------------------------------
+-- units.target_firmware_release_id
+-- ---------------------------------------------------------------------------
+-- Se agrega con ALTER porque firmware_releases se define después de units.
+-- Versión "objetivo" que el admin quiere que la unidad ejecute — distinta de
+-- units.firmware_version (lo que el dispositivo reporta tener instalado).
+-- El dashboard compara ambas para mostrar "al día" / "actualización pendiente".
+-- ON DELETE SET NULL: si el release se borra, la unidad queda sin objetivo.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE units ADD COLUMN target_firmware_release_id UUID
+    REFERENCES firmware_releases(id) ON DELETE SET NULL ON UPDATE CASCADE;
+
+CREATE INDEX idx_units_target_firmware_release_id ON units(target_firmware_release_id)
+    WHERE target_firmware_release_id IS NOT NULL;
 
 -- telegram_users
 -- ---------------------------------------------------------------------------

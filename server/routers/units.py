@@ -45,6 +45,7 @@ class UnitOut(BaseModel):
     name: str
     is_active: bool
     firmware_version: Optional[str] = None
+    target_firmware_release_id: Optional[str] = None
     last_seen: Optional[datetime] = None
     created_at: datetime
     active_profile_id: Optional[str] = None
@@ -96,6 +97,7 @@ def _unit_to_out(unit: Unit, db: Session) -> UnitOut:
         name=unit.name,
         is_active=unit.is_active,
         firmware_version=unit.firmware_version,
+        target_firmware_release_id=str(unit.target_firmware_release_id) if unit.target_firmware_release_id else None,
         last_seen=unit.last_seen,
         created_at=unit.created_at,
         active_profile_id=_active_profile_id(unit, db),
