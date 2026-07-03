@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { api } from '../api'
+import { api, saveTokens } from '../api'
 import { Button, Input, Alert } from '../design-system'
 
 export default function Register() {
@@ -16,7 +16,15 @@ export default function Register() {
     setError(null)
     try {
       await api.register(email, password)
-      navigate('/login')
+      try {
+        const data = await api.login(email, password)
+        saveTokens(data.access_token, data.refresh_token)
+        navigate('/units', { replace: true })
+      } catch (loginErr) {
+        // La cuenta se creó correctamente pero el login automático falló;
+        // mandamos al usuario a loguearse manualmente en vez de dejarlo varado.
+        navigate('/login')
+      }
     } catch (err) {
       setError(err.message)
     } finally {

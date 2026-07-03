@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { Button, Alert, Input } from '../design-system'
 import AppShell from '../components/AppShell'
+import { useOrg } from '../contexts/OrgContext'
 
 export default function NewOrganizationPage() {
   const navigate      = useNavigate()
+  const { addOrg }    = useOrg()
   const [name, setName]       = useState('')
   const [error, setError]     = useState(null)
   const [loading, setLoading] = useState(false)
@@ -14,8 +16,9 @@ export default function NewOrganizationPage() {
     e.preventDefault()
     setLoading(true); setError(null)
     try {
-      await api.createOrganization(name)
-      navigate('/organizations')
+      const org = await api.createOrganization(name)
+      addOrg(org)
+      navigate('/units')
     } catch (err) {
       setError(err.message)
     } finally {
