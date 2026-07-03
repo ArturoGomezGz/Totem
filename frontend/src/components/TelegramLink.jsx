@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
 import { Button, Alert, Badge } from '../design-system'
+import { copyToClipboard } from '../utils/clipboard'
 
 const COUNTDOWN_SECONDS = 300
 
@@ -10,6 +11,7 @@ export default function TelegramLink() {
   const [countdown, setCountdown] = useState(0)
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
+  const [copied, setCopied]       = useState(false)
 
   const loadStatus = async () => {
     try { setStatus(await api.getTelegramStatus()) } catch { /* silencioso */ }
@@ -55,7 +57,15 @@ export default function TelegramLink() {
     }
   }
 
-  const copyToken = () => { if (token?.token) navigator.clipboard.writeText(token.token) }
+  const copyToken = () => {
+    if (!token?.token) return
+    copyToClipboard(token.token).then(ok => {
+      if (ok) {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }
+    })
+  }
 
   if (!status) return null
 
@@ -126,7 +136,7 @@ export default function TelegramLink() {
                 }}>
                   {token.token}
                 </span>
-                <Button size="sm" variant="outline" onClick={copyToken}>Copiar</Button>
+                <Button size="sm" variant="outline" onClick={copyToken}>{copied ? 'Copiado' : 'Copiar'}</Button>
               </div>
 
               <div style={{ borderTop: '1px solid var(--blue-100)', paddingTop: 'var(--space-4)' }}>

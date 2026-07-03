@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Alert, Card, Input } from '../design-system'
 import { buildNvsCsv, downloadTextFile } from '../utils/nvsConfig'
+import { copyToClipboard } from '../utils/clipboard'
 
 const eyebrow = {
   fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
@@ -21,6 +22,7 @@ export default function ProvisioningPanel({
   const [wifiPass, setWifiPass] = useState(initialWifiPass)
   const [mqttHost, setMqttHost] = useState(stripMqttPrefix(initialMqttUri))
   const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(false)
 
   const mqttUri = `mqtt://${mqttHost}`
 
@@ -29,9 +31,14 @@ export default function ProvisioningPanel({
   const download = () => downloadTextFile('nvs_config.csv', getCsv())
 
   const copyContent = () => {
-    navigator.clipboard?.writeText(getCsv()).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+    setCopyError(false)
+    copyToClipboard(getCsv()).then(ok => {
+      if (ok) {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } else {
+        setCopyError(true)
+      }
     })
   }
 
@@ -105,6 +112,11 @@ export default function ProvisioningPanel({
             {copied ? 'Copiado' : 'Copiar contenido'}
           </Button>
         </div>
+        {copyError && (
+          <Alert tone="danger" style={{ marginTop: 'var(--space-3)' }}>
+            No se pudo copiar automáticamente — usa "Descargar" en su lugar.
+          </Alert>
+        )}
       </Card>
     </>
   )
