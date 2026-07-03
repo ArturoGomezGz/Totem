@@ -1,3 +1,16 @@
+// Firmware base de fábrica.
+//
+// Es el ÚNICO binario que se flashea por USB en una unidad nueva. No sensa,
+// no riega, no maneja perfiles ni alertas — su único trabajo es conectar a
+// WiFi/MQTT, reportar su versión, y esperar el primer OTA hacia un firmware
+// con funcionalidad real (ver firmware/simulator/main/simulator.c). A partir
+// de ahí, todo el ciclo de vida del dispositivo es 100% OTA.
+//
+// El código de WiFi/NVS/OTA es intencionalmente el mismo que en
+// simulator.c (duplicado, no un componente compartido) — no hay toolchain
+// de ESP-IDF para validar una extracción a componente compartido en el
+// momento en que se escribió esto. Si se agrega CI con el toolchain, migrar
+// ambos a un componente común (ej. firmware/components/totem_core).
 #include <string.h>
 #include <stdlib.h>
 #include "freertos/FreeRTOS.h"
@@ -7,7 +20,6 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_random.h"
 #include "esp_ota_ops.h"
 #include "esp_http_client.h"
 #include "nvs_flash.h"
@@ -26,20 +38,11 @@
 // (WiFi + MQTT) antes de que el bootloader lo revierta automáticamente.
 #define ROLLBACK_CONFIRM_TIMEOUT_MS   90000
 
-// Parámetros del modelo de temperatura
-#define TEMP_BASE       20.0f   // temperatura inicial
-#define TEMP_ALERT      40.0f   // umbral que dispara alerta
-#define TEMP_MAX        45.0f   // techo absoluto
-#define TEMP_SAFE       38.0f   // por debajo de aquí se resetea la alerta (2°C bajo el umbral)
-#define TEMP_RISE_RATE   1.4f   // °C por ciclo con bomba apagada  (~1 min de 20 a 28)
-#define TEMP_DROP_RATE   1.4f   // °C por ciclo con bomba encendida (~1 min de 28 a 20)
-
-static const char *TAG = "simulator";
+static const char *TAG = "bootstrap";
 static EventGroupHandle_t wifi_events;
 static int retry_count = 0;
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 static bool ota_in_progress = false;
-static volatile bool pump_on = false;
 static volatile bool pending_rollback_confirm = false;
 
 // Credenciales cargadas desde NVS al arrancar
@@ -50,12 +53,7 @@ static char unit_id[64];
 static char api_key[128];
 
 // Topics MQTT — construidos después de cargar unit_id desde NVS
-static char topic_readings[96];
-static char topic_commands[96];
-static char topic_alerts[96];
-static char topic_events[96];
 static char topic_ota[96];
-static char topic_profile[96];
 static char topic_status[96];
 
 // ============================================================
@@ -82,13 +80,8 @@ static void load_config_from_nvs(void)
 
     nvs_close(nvs);
 
-    snprintf(topic_readings, sizeof(topic_readings), "totem/%s/readings", unit_id);
-    snprintf(topic_commands, sizeof(topic_commands), "totem/%s/commands", unit_id);
-    snprintf(topic_alerts,   sizeof(topic_alerts),   "totem/%s/alerts",   unit_id);
-    snprintf(topic_events,   sizeof(topic_events),   "totem/%s/events",   unit_id);
-    snprintf(topic_ota,      sizeof(topic_ota),      "totem/%s/ota",      unit_id);
-    snprintf(topic_profile,  sizeof(topic_profile),  "totem/%s/profile",  unit_id);
-    snprintf(topic_status,   sizeof(topic_status),   "totem/%s/status",   unit_id);
+    snprintf(topic_ota,    sizeof(topic_ota),    "totem/%s/ota",    unit_id);
+    snprintf(topic_status, sizeof(topic_status), "totem/%s/status", unit_id);
 
     ESP_LOGI(TAG, "Config cargada — unit_id: %s, broker: %s", unit_id, mqtt_uri);
 }
@@ -334,52 +327,11 @@ static void handle_ota_message(const char *data, int data_len)
 }
 
 // ============================================================
-// Comandos
-// ============================================================
-
-static void handle_command(const char *data, int data_len)
-{
-    cJSON *json = cJSON_ParseWithLength(data, data_len);
-    if (!json) {
-        ESP_LOGE(TAG, "Comando: JSON inválido");
-        return;
-    }
-
-    cJSON *type = cJSON_GetObjectItem(json, "type");
-    if (cJSON_IsString(type)) {
-        const char *action = NULL;
-
-        if (strcmp(type->valuestring, "pump_on") == 0) {
-            pump_on = true;
-            action  = "pump_on";
-            ESP_LOGI(TAG, "Bomba: ENCENDIDA — temperatura comenzará a bajar");
-        } else if (strcmp(type->valuestring, "pump_off") == 0) {
-            pump_on = false;
-            action  = "pump_off";
-            ESP_LOGI(TAG, "Bomba: APAGADA — temperatura comenzará a subir");
-        } else {
-            ESP_LOGW(TAG, "Comando desconocido: %s", type->valuestring);
-        }
-
-        // Notificar al servidor el cambio de estado de la bomba
-        if (action) {
-            char event_payload[64];
-            snprintf(event_payload, sizeof(event_payload), "{\"action\":\"%s\"}", action);
-            esp_mqtt_client_publish(mqtt_client, topic_events, event_payload, 0, 1, 0);
-        }
-    }
-
-    cJSON_Delete(json);
-}
-
-// ============================================================
 // MQTT
 // ============================================================
 
 // Versión de este binario — viene de version.txt (ver raíz del proyecto),
 // incrustada por ESP-IDF en el descriptor de la app en tiempo de build.
-// El server la extrae de los mismos bytes del .bin al publicarlo, así que
-// nunca puede desincronizarse de lo que el dispositivo realmente reporta.
 static const char *firmware_version(void)
 {
     return esp_ota_get_app_description()->version;
@@ -417,10 +369,8 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
     switch (id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT conectado");
-            esp_mqtt_client_subscribe(mqtt_client, topic_commands, 1);
-            esp_mqtt_client_subscribe(mqtt_client, topic_ota,      1);
-            esp_mqtt_client_subscribe(mqtt_client, topic_profile,  1);
-            ESP_LOGI(TAG, "Suscrito a: %s, %s, %s", topic_commands, topic_ota, topic_profile);
+            esp_mqtt_client_subscribe(mqtt_client, topic_ota, 1);
+            ESP_LOGI(TAG, "Suscrito a: %s", topic_ota);
 
             publish_status();
 
@@ -443,14 +393,9 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
                             ? event->topic_len : (int)sizeof(topic) - 1;
             strncpy(topic, event->topic, topic_len);
 
-            if (strcmp(topic, topic_commands) == 0) {
-                ESP_LOGI(TAG, "Comando recibido: %.*s", event->data_len, event->data);
-                handle_command(event->data, event->data_len);
-            } else if (strcmp(topic, topic_ota) == 0) {
+            if (strcmp(topic, topic_ota) == 0) {
                 ESP_LOGI(TAG, "Mensaje OTA recibido");
                 handle_ota_message(event->data, event->data_len);
-            } else if (strcmp(topic, topic_profile) == 0) {
-                ESP_LOGI(TAG, "Perfil recibido: %.*s", event->data_len, event->data);
             } else {
                 ESP_LOGI(TAG, "Mensaje en [%s]: %.*s", topic, event->data_len, event->data);
             }
@@ -481,75 +426,6 @@ static void mqtt_init(void)
 }
 
 // ============================================================
-// Publicación de lecturas simuladas
-// ============================================================
-
-static void publish_readings_task(void *pvParameters)
-{
-    float temperature = TEMP_BASE;
-    float humidity    = 65.0f;
-    float light       = 300.0f;
-    float co2         = 500.0f;
-    bool  alert_sent  = false;
-
-    char payload[256];
-
-    while (1) {
-        if (!ota_in_progress) {
-
-            // --- Modelo de temperatura ---
-            if (pump_on) {
-                temperature -= TEMP_DROP_RATE;
-                if (temperature < TEMP_BASE) temperature = TEMP_BASE;
-            } else {
-                temperature += TEMP_RISE_RATE;
-                if (temperature > TEMP_MAX) temperature = TEMP_MAX;
-            }
-
-            // Ruido de baja amplitud en todos los sensores
-            float t_pub  = temperature + ((float)(esp_random() % 20) - 10) * 0.02f;
-            float h_pub  = humidity    + ((float)(esp_random() % 10) -  5) * 0.1f;
-            float l_pub  = light       + ((float)(esp_random() % 20) - 10) * 1.0f;
-            float c_pub  = co2         + ((float)(esp_random() % 10) -  5) * 1.0f;
-
-            // Publicar lectura
-            snprintf(payload, sizeof(payload),
-                "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%.1f,\"co2\":%.1f}",
-                t_pub, h_pub, l_pub, c_pub);
-            esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
-            ESP_LOGI(TAG, "temp=%.1f hum=%.1f co2=%.1f | bomba=%s | alerta=%s",
-                t_pub, h_pub, c_pub,
-                pump_on    ? "ON"   : "OFF",
-                alert_sent ? "ACTIVA" : "ok");
-
-            // --- Disparar alerta al cruzar el umbral (una sola vez por ciclo) ---
-            if (!alert_sent && temperature >= TEMP_ALERT) {
-                snprintf(payload, sizeof(payload),
-                    "{\"type\":\"temperature_high\",\"severity\":\"warning\","
-                    "\"message\":\"Temperatura critica: %.1f C (umbral: %.0f C). Activa la bomba.\"}",
-                    temperature, TEMP_ALERT);
-                esp_mqtt_client_publish(mqtt_client, topic_alerts, payload, 0, 1, 0);
-                ESP_LOGW(TAG, ">>> ALERTA enviada: temperatura=%.1f°C", temperature);
-                alert_sent = true;
-            }
-
-            // --- Resetear alerta al volver al rango seguro ---
-            if (alert_sent && !pump_on && temperature <= TEMP_SAFE) {
-                alert_sent = false;
-                ESP_LOGI(TAG, "Temperatura normalizada (%.1f°C) — alerta reseteada", temperature);
-            }
-            // Con bomba encendida también resetear cuando baje lo suficiente
-            if (alert_sent && pump_on && temperature <= TEMP_SAFE) {
-                alert_sent = false;
-                ESP_LOGI(TAG, "Temperatura normalizada con bomba (%.1f°C) — alerta reseteada", temperature);
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
-}
-
-// ============================================================
 // Entry point
 // ============================================================
 
@@ -571,7 +447,6 @@ void app_main(void)
     wifi_init();
     mqtt_init();
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    xTaskCreate(publish_readings_task, "readings", 4096, NULL, 5, NULL);
+    // Sin lógica propia — el dispositivo queda a la espera de un OTA hacia
+    // un firmware con funcionalidad real. No hay sensores ni riego aquí.
 }

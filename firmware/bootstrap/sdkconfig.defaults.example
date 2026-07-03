@@ -2,11 +2,14 @@
 # Este archivo NO debe contener credenciales reales.
 # sdkconfig.defaults está en .gitignore — nunca committear credenciales.
 
-# Tabla de particiones personalizada con soporte OTA
+# Tabla de particiones personalizada con soporte OTA — debe coincidir con
+# la de firmware/simulator (mismo layout de particiones ota_0/ota_1) para
+# que un dispositivo flasheado con bootstrap pueda recibir por OTA
+# cualquier versión publicada del firmware con funcionalidad real.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # Rollback automático: si un OTA no llega a confirmarse (ver
-# simulator.c — pending_rollback_confirm / rollback_watchdog_task),
+# bootstrap.c — pending_rollback_confirm / rollback_watchdog_task),
 # el bootloader revierte solo a la partición anterior conocida como válida.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
