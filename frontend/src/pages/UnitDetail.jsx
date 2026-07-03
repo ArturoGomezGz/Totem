@@ -11,13 +11,6 @@ import AlertsList from '../components/AlertsList'
 import UnitSettingsPanel from '../components/UnitSettingsPanel'
 
 const CMD_LOCK_MS = 8000
-const TABS = [
-  { id: 'live',     label: 'En vivo'  },
-  { id: 'readings', label: 'Lecturas' },
-  { id: 'events',   label: 'Eventos'  },
-  { id: 'alerts',   label: 'Alertas'  },
-  { id: 'settings', label: 'Configuración' },
-]
 
 const SENSOR_ACCENTS = {
   temperature: 'var(--teal-500)',
@@ -40,10 +33,19 @@ export default function UnitDetail() {
   const pendingTimer                  = useRef(null)
 
   const [profiles, setProfiles] = useState([])
+  const [alertSummary, setAlertSummary] = useState({ count: 0, hasCritical: false })
+
+  const loadAlertSummary = () => {
+    api.getAlerts({ unit_id: unitId, resolved: false })
+      .then(data => setAlertSummary({ count: data.length, hasCritical: data.some(a => a.severity === 'critical') }))
+      .catch(() => {})
+  }
 
   useEffect(() => {
     api.getUnit(unitId).then(setUnitMeta).catch(() => {})
   }, [unitId])
+
+  useEffect(loadAlertSummary, [unitId])
 
   useEffect(() => {
     if (!activeOrgId) return
@@ -108,7 +110,21 @@ export default function UnitDetail() {
         )}
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} style={{ marginBottom: 'var(--space-6)' }} />
+      <Tabs
+        tabs={[
+          { id: 'live',     label: 'En vivo'  },
+          { id: 'readings', label: 'Lecturas' },
+          { id: 'events',   label: 'Eventos'  },
+          {
+            id: 'alerts',
+            label: alertSummary.count > 0
+              ? <>Alertas <Badge tone={alertSummary.hasCritical ? 'danger' : 'warning'}>{alertSummary.count}</Badge></>
+              : 'Alertas',
+          },
+          { id: 'settings', label: 'Configuración' },
+        ]}
+        value={tab} onChange={setTab} style={{ marginBottom: 'var(--space-6)' }}
+      />
 
       {tab === 'live' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
@@ -153,7 +169,7 @@ export default function UnitDetail() {
 
       {tab === 'readings' && <ReadingsChart unitId={unitId} />}
       {tab === 'events'   && <EventsList   unitId={unitId} />}
-      {tab === 'alerts'   && <AlertsList   unitId={unitId} />}
+      {tab === 'alerts'   && <AlertsList   unitId={unitId} onResolved={loadAlertSummary} />}
       {tab === 'settings' && unitMeta && (
         <UnitSettingsPanel unit={unitMeta} profiles={profiles} onUnitChange={setUnitMeta} />
       )}

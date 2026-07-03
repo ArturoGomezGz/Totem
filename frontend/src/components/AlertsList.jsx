@@ -12,7 +12,7 @@ function fmt(ts) {
 const SEVERITY_TONE = { critical: 'danger', warning: 'warning' }
 const FILTER_OPTS = [['active', 'Activas'], ['resolved', 'Resueltas'], ['all', 'Todas']]
 
-export default function AlertsList({ unitId }) {
+export default function AlertsList({ unitId, onResolved }) {
   const [alerts, setAlerts]     = useState([])
   const [filter, setFilter]     = useState('active')
   const [loading, setLoading]   = useState(true)
@@ -35,6 +35,7 @@ export default function AlertsList({ unitId }) {
     try {
       await api.resolveAlert(alertId)
       load()
+      onResolved && onResolved()
     } catch (err) {
       setError(err.message)
     } finally {

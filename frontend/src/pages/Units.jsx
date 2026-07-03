@@ -11,9 +11,10 @@ export default function Units() {
   const navigate                   = useNavigate()
   const { activeOrgId, activeOrg } = useOrg()
 
-  const [units, setUnits]       = useState([])
-  const [profiles, setProfiles] = useState([])
-  const [error, setError]       = useState(null)
+  const [units, setUnits]             = useState([])
+  const [profiles, setProfiles]       = useState([])
+  const [alertCounts, setAlertCounts] = useState({})
+  const [error, setError]             = useState(null)
 
   useEffect(() => {
     if (!activeOrgId) return
@@ -21,6 +22,16 @@ export default function Units() {
       .then(data => { setUnits(data); setError(null) })
       .catch(err => setError(err.message))
     api.getProfiles(activeOrgId).then(setProfiles).catch(() => {})
+    api.getAlerts({ resolved: false }).then(alerts => {
+      const byUnit = {}
+      alerts.forEach(a => {
+        const entry = byUnit[a.unit_id] ?? { count: 0, hasCritical: false }
+        entry.count += 1
+        if (a.severity === 'critical') entry.hasCritical = true
+        byUnit[a.unit_id] = entry
+      })
+      setAlertCounts(byUnit)
+    }).catch(() => {})
   }, [activeOrgId])
 
   const profileName = (id) => profiles.find(p => p.id === id)?.name
@@ -105,6 +116,11 @@ export default function Units() {
                 {unit.type === 'totem' && (
                   <Badge tone={unit.active_profile_id ? 'blue' : 'warning'}>
                     {unit.active_profile_id ? (profileName(unit.active_profile_id) ?? '...') : 'Sin perfil'}
+                  </Badge>
+                )}
+                {alertCounts[unit.id] && (
+                  <Badge tone={alertCounts[unit.id].hasCritical ? 'danger' : 'warning'}>
+                    {alertCounts[unit.id].count === 1 ? '1 alerta' : `${alertCounts[unit.id].count} alertas`}
                   </Badge>
                 )}
               </div>
