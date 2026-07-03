@@ -13,22 +13,6 @@ function stripMqttPrefix(uri) {
   return uri.startsWith('mqtt://') ? uri.slice(7) : uri
 }
 
-function ReadOnlyField({ label, value, mono = false }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-      <span style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
-        {label}
-      </span>
-      <span style={{
-        fontFamily: mono ? 'var(--font-mono)' : 'var(--font-body)', fontSize: 'var(--text-base)', color: 'var(--text-strong)',
-        padding: '10px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)',
-      }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
 export default function ProvisioningPanel({
   unitId, apiKey, editable = true,
   initialWifiSsid = '', initialWifiPass = '', initialMqttUri = '<IP-de-tu-server>:1883',
@@ -57,7 +41,7 @@ export default function ProvisioningPanel({
         Copia esta clave o descarga el archivo de configuración antes de salir de esta página.
       </Alert>
 
-      <Card style={{ marginBottom: 'var(--space-5)' }}>
+      <Card>
         <span style={eyebrow}>API Key</span>
         <code style={{
           display: 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
@@ -70,64 +54,58 @@ export default function ProvisioningPanel({
           onClick={() => navigator.clipboard?.writeText(apiKey)}>
           Copiar
         </Button>
-      </Card>
 
-      <Card>
-        <span style={eyebrow}>Datos de red</span>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-          Solo se usan para armar el archivo <code>nvs_config.csv</code> en tu navegador —
-          no se envían ni se guardan en el servidor.
-        </p>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: 'var(--space-5)', paddingTop: 'var(--space-5)' }}>
+          <span style={eyebrow}>Datos de red</span>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
+            Solo se usan para armar el archivo <code>nvs_config.csv</code> en tu navegador —
+            no se envían ni se guardan en el servidor.
+          </p>
 
-        {editable ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <Input label="SSID WiFi" value={wifiSsid} onChange={e => setWifiSsid(e.target.value)} />
-            <Input label="Contraseña WiFi" type="password" value={wifiPass} onChange={e => setWifiPass(e.target.value)} />
+          {editable && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+              <Input label="SSID WiFi" value={wifiSsid} onChange={e => setWifiSsid(e.target.value)} />
+              <Input label="Contraseña WiFi" type="password" value={wifiPass} onChange={e => setWifiPass(e.target.value)} />
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              <label style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
-                MQTT URI
-              </label>
-              <div style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                <span style={{
-                  display: 'flex', alignItems: 'center', padding: '10px 12px',
-                  background: 'var(--bg-subtle)', borderRight: '1px solid var(--border-default)',
-                  fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
-                  whiteSpace: 'nowrap', userSelect: 'none',
-                }}>
-                  mqtt://
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <label style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
+                  MQTT URI
+                </label>
+                <div style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <span style={{
+                    display: 'flex', alignItems: 'center', padding: '10px 12px',
+                    background: 'var(--bg-subtle)', borderRight: '1px solid var(--border-default)',
+                    fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap', userSelect: 'none',
+                  }}>
+                    mqtt://
+                  </span>
+                  <input
+                    value={mqttHost}
+                    onChange={e => setMqttHost(e.target.value)}
+                    placeholder="192.168.1.100:1883"
+                    style={{
+                      flex: 1, border: 'none', outline: 'none', padding: '10px 14px',
+                      fontFamily: 'var(--font-body)', fontSize: 'var(--text-base)', color: 'var(--text-strong)',
+                      background: 'var(--white)',
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                  IP local de tu server (RPi/PC), puerto 1883
                 </span>
-                <input
-                  value={mqttHost}
-                  onChange={e => setMqttHost(e.target.value)}
-                  placeholder="192.168.1.100:1883"
-                  style={{
-                    flex: 1, border: 'none', outline: 'none', padding: '10px 14px',
-                    fontFamily: 'var(--font-body)', fontSize: 'var(--text-base)', color: 'var(--text-strong)',
-                    background: 'var(--white)',
-                  }}
-                />
               </div>
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                IP local de tu server (RPi/PC), puerto 1883
-              </span>
             </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <ReadOnlyField label="SSID WiFi" value={wifiSsid || '—'} />
-            <ReadOnlyField label="Contraseña WiFi" value={wifiPass ? '••••••••' : '—'} />
-            <ReadOnlyField label="MQTT URI" value={mqttUri} mono />
-          </div>
-        )}
+          )}
 
-        <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-4)' }}>
-          <Button variant="primary" size="sm" onClick={download}>
-            Descargar nvs_config.csv
-          </Button>
-          <Button variant="outline" size="sm" onClick={copyContent}>
-            {copied ? 'Copiado' : 'Copiar contenido'}
-          </Button>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <Button variant="primary" size="sm" onClick={download}>
+              Descargar nvs_config.csv
+            </Button>
+            <Button variant="outline" size="sm" onClick={copyContent}>
+              {copied ? 'Copiado' : 'Copiar contenido'}
+            </Button>
+          </div>
         </div>
       </Card>
     </>
