@@ -42,16 +42,38 @@ export function seedUnits() {
       id: 'unit-totem-1', organization_id: 'org-demo', type: 'totem', name: 'Totem Norte',
       is_active: true, firmware_version: '1.0.0', last_seen: new Date().toISOString(),
       created_at: hoursAgo(24 * 14), active_profile_id: 'profile-lechuga',
+      target_firmware_release_id: 'fw-release-2',
     },
     {
       id: 'unit-totem-2', organization_id: 'org-demo', type: 'totem', name: 'Totem Sur',
       is_active: true, firmware_version: null, last_seen: null,
       created_at: hoursAgo(2), active_profile_id: null,
+      target_firmware_release_id: null,
     },
     {
       id: 'unit-tank-1', organization_id: 'org-demo', type: 'supply_tank', name: 'Tanque Principal',
       is_active: true, firmware_version: '0.9.2', last_seen: minutesAgo(2),
       created_at: hoursAgo(24 * 14), active_profile_id: null,
+      target_firmware_release_id: null,
+    },
+  ]
+}
+
+export function seedFirmwareReleases() {
+  return [
+    {
+      id: 'fw-release-1', organization_id: 'org-demo', version: '0.9.2',
+      description: 'Primera versión estable — lectura de sensores y bomba manual.',
+      sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678901234567890abcdef12345',
+      uploaded_by: 'user-demo', released_at: hoursAgo(24 * 30),
+      download_url: '#',
+    },
+    {
+      id: 'fw-release-2', organization_id: 'org-demo', version: '1.0.0',
+      description: 'Agrega buffer offline y reconexión MQTT automática.',
+      sha256: 'f0e1d2c3b4a5968778695a4b3c2d1e0f0918273645afedcba9876543210fed1',
+      uploaded_by: 'user-demo', released_at: hoursAgo(24 * 7),
+      download_url: '#',
     },
   ]
 }

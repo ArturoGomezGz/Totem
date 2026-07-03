@@ -5,6 +5,7 @@
 import {
   seedOrganizations, seedUnits, seedProfiles,
   seedAlerts, seedEvents, seedReadings, seedLiveState,
+  seedFirmwareReleases,
 } from './fixtures'
 
 export const store = {
@@ -16,6 +17,7 @@ export const store = {
   readings: seedReadings(),
   liveState: seedLiveState(),
   telegram: { linked: false, linked_at: null },
+  firmwareReleases: seedFirmwareReleases(),
 }
 
 const listeners = {} // unit_id -> Set<fn>

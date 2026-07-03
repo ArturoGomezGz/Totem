@@ -185,6 +185,49 @@ export const mockApi = {
     unit.active_profile_id = profile_id
     return { detail: 'Perfil asignado' }
   },
+
+  // ---------- Firmware ----------
+  getFirmwareReleases: async (organization_id) => {
+    await delay()
+    return store.firmwareReleases
+      .filter(r => r.organization_id === organization_id)
+      .sort((a, b) => new Date(b.released_at) - new Date(a.released_at))
+  },
+  uploadFirmware: async ({ organization_id, version, description }) => {
+    await delay(400)
+    const existing = store.firmwareReleases.find(
+      r => r.organization_id === organization_id && r.version === version
+    )
+    if (existing) return notFound(`Ya existe un release para la versión ${version} en esta organización`)
+    const release = {
+      id: uid(), organization_id, version, description: description || null,
+      sha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+      uploaded_by: 'user-demo', released_at: new Date().toISOString(), download_url: '#',
+    }
+    store.firmwareReleases.push(release)
+    return release
+  },
+  deployFirmware: async (release_id, target) => {
+    await delay(300)
+    const release = store.firmwareReleases.find(r => r.id === release_id)
+    if (!release) return notFound('Release no encontrado')
+
+    if (target.unit_id) {
+      const unit = store.units.find(u => u.id === target.unit_id)
+      if (!unit) return notFound('Unidad no encontrada')
+      unit.target_firmware_release_id = release.id
+      return { detail: `Firmware ${release.version} aplicado a unidad ${unit.name}`, version: release.version }
+    }
+
+    const units = store.units.filter(
+      u => u.organization_id === target.organization_id && u.type === 'totem' && u.is_active
+    )
+    units.forEach(u => { u.target_firmware_release_id = release.id })
+    return {
+      detail: `Firmware ${release.version} aplicado a ${units.length} unidades`,
+      version: release.version, units: units.map(u => u.id),
+    }
+  },
 }
 
 // Helper de desarrollo: genera más lecturas para una unidad desde la consola

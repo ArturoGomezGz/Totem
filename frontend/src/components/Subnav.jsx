@@ -1,13 +1,18 @@
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useOrg } from '../contexts/OrgContext'
 
 const SECTIONS = [
   { id: 'units',    label: 'Unidades', path: '/units'    },
   { id: 'profiles', label: 'Perfiles', path: '/profiles' },
+  { id: 'firmware', label: 'Firmware', path: '/firmware', adminOnly: true },
 ]
 
 export default function Subnav() {
-  const { pathname } = useLocation()
-  const navigate     = useNavigate()
+  const { pathname }  = useLocation()
+  const navigate      = useNavigate()
+  const { activeOrg } = useOrg()
+
+  const sections = SECTIONS.filter(s => !s.adminOnly || activeOrg?.role === 'admin')
 
   return (
     <nav style={{
@@ -22,7 +27,7 @@ export default function Subnav() {
       boxShadow: 'var(--shadow-xs)',
       flexShrink: 0,
     }}>
-      {SECTIONS.map(s => {
+      {sections.map(s => {
         const active = pathname === s.path || pathname.startsWith(s.path + '/')
         return (
           <button

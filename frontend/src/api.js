@@ -84,6 +84,30 @@ const realApi = {
   updateProfile: (id, body)                 => request('PUT',    `/profiles/${id}`, body),
   deleteProfile: (id)                       => request('DELETE', `/profiles/${id}`),
   assignProfile: (unit_id, profile_id)      => request('PUT',    `/units/${unit_id}/profile`, { profile_id }),
+
+  getFirmwareReleases: (organization_id) => request('GET', `/firmware?organization_id=${organization_id}`),
+  uploadFirmware: async ({ organization_id, version, description, file }) => {
+    const form = new FormData()
+    form.append('organization_id', organization_id)
+    form.append('version', version)
+    if (description) form.append('description', description)
+    form.append('file', file)
+
+    const token = getToken()
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const res = await fetch(`${BASE}/firmware`, { method: 'POST', headers, body: form })
+    if (res.status === 401 && token) {
+      clearTokens()
+      window.location.href = '/login'
+      return
+    }
+    const data = await res.json().catch(() => null)
+    if (!res.ok) throw new Error(data?.detail || `Error del servidor (${res.status})`)
+    return data
+  },
+  deployFirmware: (release_id, target) => request('POST', `/firmware/${release_id}/deploy`, target),
 }
 
 export const api = import.meta.env.VITE_USE_MOCKS === 'true' ? mockApi : realApi
