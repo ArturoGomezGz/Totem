@@ -193,12 +193,19 @@ export const mockApi = {
       .filter(r => r.organization_id === organization_id)
       .sort((a, b) => new Date(b.released_at) - new Date(a.released_at))
   },
-  uploadFirmware: async ({ organization_id, version, description }) => {
+  uploadFirmware: async ({ organization_id, description }) => {
     await delay(400)
-    const existing = store.firmwareReleases.find(
-      r => r.organization_id === organization_id && r.version === version
-    )
-    if (existing) return notFound(`Ya existe un release para la versión ${version} en esta organización`)
+    // En real, la versión se lee del binario subido — el mock no tiene un
+    // binario real que parsear, así que simula el mismo efecto incrementando
+    // el patch de la última versión publicada en la organización.
+    const orgReleases = store.firmwareReleases.filter(r => r.organization_id === organization_id)
+    let version = '1.0.0'
+    if (orgReleases.length > 0) {
+      const latest = [...orgReleases].sort((a, b) => new Date(b.released_at) - new Date(a.released_at))[0]
+      const parts = latest.version.split('.').map(Number)
+      parts[2] = (parts[2] || 0) + 1
+      version = parts.join('.')
+    }
     const release = {
       id: uid(), organization_id, version, description: description || null,
       sha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),

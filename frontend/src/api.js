@@ -86,10 +86,9 @@ const realApi = {
   assignProfile: (unit_id, profile_id)      => request('PUT',    `/units/${unit_id}/profile`, { profile_id }),
 
   getFirmwareReleases: (organization_id) => request('GET', `/firmware?organization_id=${organization_id}`),
-  uploadFirmware: async ({ organization_id, version, description, file }) => {
+  uploadFirmware: async ({ organization_id, description, file }) => {
     const form = new FormData()
     form.append('organization_id', organization_id)
-    form.append('version', version)
     if (description) form.append('description', description)
     form.append('file', file)
 

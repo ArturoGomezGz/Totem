@@ -103,7 +103,7 @@ export default function Firmware() {
   const [notice, setNotice]     = useState(null)
 
   const [showUpload, setShowUpload] = useState(false)
-  const [form, setForm]             = useState({ version: '', description: '', file: null })
+  const [form, setForm]             = useState({ description: '', file: null })
   const [uploading, setUploading]   = useState(false)
   const [uploadError, setUploadError] = useState(null)
 
@@ -126,18 +126,17 @@ export default function Firmware() {
 
   const handleUpload = async (e) => {
     e.preventDefault()
-    if (!form.version.trim() || !form.file) return
+    if (!form.file) return
     setUploading(true); setUploadError(null)
     try {
-      await api.uploadFirmware({
+      const release = await api.uploadFirmware({
         organization_id: activeOrgId,
-        version: form.version.trim(),
         description: form.description.trim() || undefined,
         file: form.file,
       })
-      setForm({ version: '', description: '', file: null })
+      setForm({ description: '', file: null })
       setShowUpload(false)
-      setNotice('Versión publicada correctamente.')
+      setNotice(`Versión ${release.version} publicada correctamente.`)
       await load()
     } catch (err) {
       setUploadError(err.message)
@@ -211,27 +210,21 @@ export default function Firmware() {
         <Card style={{ marginBottom: 'var(--space-5)' }}>
           <span style={eyebrow}>Publicar nueva versión</span>
           <form onSubmit={handleUpload} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-              <Input
-                label="Versión" placeholder="1.2.0" style={{ flex: '1 1 160px' }}
-                value={form.version}
-                onChange={e => setForm(f => ({ ...f, version: e.target.value }))}
-              />
-              <Input
-                label="Descripción (opcional)" placeholder="Qué cambia en esta versión" style={{ flex: '2 1 260px' }}
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              />
-            </div>
+            <Input
+              label="Descripción (opcional)" placeholder="Qué cambia en esta versión"
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            />
             <Input
               label="Binario (.bin)" type="file" accept=".bin"
+              hint="La versión se lee automáticamente del binario — no hace falta escribirla."
               onChange={e => setForm(f => ({ ...f, file: e.target.files[0] ?? null }))}
             />
             {uploadError && <Alert tone="danger">{uploadError}</Alert>}
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <Button
                 type="submit" variant="primary" size="sm"
-                disabled={uploading || !form.version.trim() || !form.file}
+                disabled={uploading || !form.file}
               >
                 {uploading ? 'Publicando...' : 'Publicar versión'}
               </Button>
