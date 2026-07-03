@@ -22,8 +22,8 @@ export default function Register() {
         navigate('/units', { replace: true })
       } catch (loginErr) {
         // La cuenta se creó correctamente pero el login automático falló;
-        // mandamos al usuario a loguearse manualmente en vez de dejarlo varado.
-        navigate('/login')
+        // avisamos al usuario para que no interprete el salto como un error.
+        navigate('/login', { state: { info: 'Tu cuenta se creó correctamente. Inicia sesión para continuar.' } })
       }
     } catch (err) {
       setError(err.message)

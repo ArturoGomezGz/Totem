@@ -1,18 +1,21 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { api, saveTokens } from '../api'
 import { Button, Input, Alert } from '../design-system'
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState(null)
+  const [info, setInfo]         = useState(location.state?.info ?? null)
   const [loading, setLoading]   = useState(false)
 
   const submit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setInfo(null)
     try {
       const data = await api.login(email, password)
       saveTokens(data.access_token, data.refresh_token)
@@ -75,6 +78,7 @@ export default function Login() {
             Iniciar sesión
           </h1>
 
+          {info && <Alert tone="success" onClose={() => setInfo(null)}>{info}</Alert>}
           {error && <Alert tone="danger" onClose={() => setError(null)}>{error}</Alert>}
 
           <Input
