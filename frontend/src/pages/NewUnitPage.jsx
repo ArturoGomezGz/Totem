@@ -50,7 +50,7 @@ export default function NewUnitPage() {
             initialWifiSsid={wifiSsid} initialWifiPass={wifiPass}
             initialMqttUri={mqttHost ? `mqtt://${mqttHost}` : undefined}
           />
-          <Button variant="primary" style={{ marginTop: 'var(--space-5)' }} onClick={() => navigate('/units')}>
+          <Button variant="ghost" style={{ marginTop: 'var(--space-5)' }} onClick={() => navigate('/units')}>
             Ir a unidades
           </Button>
         </div>
