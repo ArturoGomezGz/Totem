@@ -14,7 +14,7 @@ export default function NewUnitPage() {
   const [type, setType]       = useState('totem')
   const [wifiSsid, setWifiSsid] = useState('')
   const [wifiPass, setWifiPass] = useState('')
-  const [mqttUri, setMqttUri]   = useState('')
+  const [mqttHost, setMqttHost] = useState('')
   const [error, setError]     = useState(null)
   const [loading, setLoading] = useState(false)
   const [created, setCreated] = useState(null)
@@ -46,9 +46,9 @@ export default function NewUnitPage() {
             La unidad <strong>{created.name}</strong> fue creada correctamente.
           </p>
           <ProvisioningPanel
-            unitId={created.id} apiKey={created.api_key}
+            unitId={created.id} apiKey={created.api_key} editable={false}
             initialWifiSsid={wifiSsid} initialWifiPass={wifiPass}
-            initialMqttUri={mqttUri || undefined}
+            initialMqttUri={mqttHost ? `mqtt://${mqttHost}` : undefined}
           />
           <Button variant="primary" style={{ marginTop: 'var(--space-5)' }} onClick={() => navigate('/units')}>
             Ir a unidades
@@ -88,10 +88,34 @@ export default function NewUnitPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
               <Input label="SSID WiFi" value={wifiSsid} onChange={e => setWifiSsid(e.target.value)} />
               <Input label="Contraseña WiFi" type="password" value={wifiPass} onChange={e => setWifiPass(e.target.value)} />
-              <Input
-                label="MQTT URI" value={mqttUri} onChange={e => setMqttUri(e.target.value)}
-                hint="Ej: mqtt://192.168.1.50:1883 — IP local de tu server"
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <label style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
+                  MQTT URI
+                </label>
+                <div style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <span style={{
+                    display: 'flex', alignItems: 'center', padding: '10px 12px',
+                    background: 'var(--bg-subtle)', borderRight: '1px solid var(--border-default)',
+                    fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)',
+                    whiteSpace: 'nowrap', userSelect: 'none',
+                  }}>
+                    mqtt://
+                  </span>
+                  <input
+                    value={mqttHost}
+                    onChange={e => setMqttHost(e.target.value)}
+                    placeholder="192.168.1.100:1883"
+                    style={{
+                      flex: 1, border: 'none', outline: 'none', padding: '10px 14px',
+                      fontFamily: 'var(--font-body)', fontSize: 'var(--text-base)', color: 'var(--text-strong)',
+                      background: 'var(--white)',
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+                  IP local de tu server (RPi/PC), puerto 1883
+                </span>
+              </div>
             </div>
           </div>
 
