@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
-import { Button, Alert, Input } from '../design-system'
+import { Button, Alert, Input, Select } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useOrg } from '../contexts/OrgContext'
 
@@ -10,6 +10,12 @@ const PLACEHOLDER_PARAMS = `{
   "cycle_duration_s": 30,
   "min_interval_s": 900
 }`
+
+// Único método implementado hoy en firmware/simulador (ver docs/transversal/crop-profile.md);
+// fixed_timer y lookup_table solo existen como ejemplos ilustrativos en la documentación.
+const KNOWN_METHODS = {
+  pn_threshold: ['threshold_pn', 'cycle_duration_s', 'min_interval_s'],
+}
 
 const EMPTY_FORM = {
   name: '', species: '',
@@ -57,6 +63,8 @@ export default function ProfileFormPage() {
   const [form, setForm]               = useState(EMPTY_FORM)
   const [loadError, setLoadError]     = useState(null)
   const [formError, setFormError]     = useState(null)
+  const [paramsError, setParamsError] = useState(null)
+  const [paramsFocus, setParamsFocus] = useState(false)
   const [loading, setLoading]         = useState(false)
   const [loadingProfile, setLoadingProfile] = useState(isEditing)
 
@@ -77,11 +85,12 @@ export default function ProfileFormPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setFormError(null)
+    setParamsError(null)
     let irrigation_params
     try {
       irrigation_params = JSON.parse(form.irrigation_params)
     } catch {
-      setFormError('irrigation_params debe ser JSON válido')
+      setParamsError('No es JSON válido — revisa comas, comillas o llaves faltantes.')
       return
     }
     const body = {
@@ -153,13 +162,18 @@ export default function ProfileFormPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <span style={eyebrow}>Parámetros de riego</span>
-            <Input
+            <Select
               label="Método de riego *"
               value={form.irrigation_method}
               onChange={handleChange('irrigation_method')}
-              hint="Ej: pn_threshold"
               required
-            />
+            >
+              <option value="">Selecciona un método</option>
+              <option value="pn_threshold">pn_threshold</option>
+              {form.irrigation_method && !KNOWN_METHODS[form.irrigation_method] && (
+                <option value={form.irrigation_method}>{form.irrigation_method} (no reconocido)</option>
+              )}
+            </Select>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
               <label style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
                 Parámetros del método (JSON) *
@@ -167,15 +181,29 @@ export default function ProfileFormPage() {
               <textarea
                 value={form.irrigation_params}
                 onChange={handleChange('irrigation_params')}
+                onFocus={() => setParamsFocus(true)}
+                onBlur={() => setParamsFocus(false)}
                 placeholder={PLACEHOLDER_PARAMS}
                 required
                 style={{
                   fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-strong)',
-                  background: 'var(--white)', border: '1px solid var(--border-default)',
+                  background: 'var(--white)',
+                  border: `1px solid ${paramsError ? 'var(--status-danger)' : paramsFocus ? 'var(--blue-700)' : 'var(--border-default)'}`,
                   borderRadius: 'var(--radius-sm)', padding: '10px 14px', minHeight: 120,
                   outline: 'none', width: '100%', boxSizing: 'border-box',
+                  boxShadow: paramsFocus ? 'var(--focus-ring)' : 'none',
+                  transition: 'border-color var(--duration-base) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard)',
                 }}
               />
+              <span style={{ fontSize: 'var(--text-sm)', color: paramsError ? 'var(--status-danger)' : 'var(--text-muted)' }}>
+                {paramsError
+                  ? paramsError
+                  : form.irrigation_method
+                    ? (KNOWN_METHODS[form.irrigation_method]
+                        ? `Claves esperadas: ${KNOWN_METHODS[form.irrigation_method].join(', ')}`
+                        : 'Método no reconocido por el sistema; verifica el nombre.')
+                    : 'Selecciona un método de riego para ver las claves esperadas.'}
+              </span>
             </div>
           </div>
 
