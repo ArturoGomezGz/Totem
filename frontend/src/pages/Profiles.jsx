@@ -120,9 +120,8 @@ export default function Profiles() {
                 Editar
               </Button>
               <Button
-                size="sm" variant="ghost"
+                size="sm" variant="danger"
                 disabled={deleting === profile.id}
-                style={{ color: 'var(--status-danger)' }}
                 onClick={() => handleDelete(profile)}
               >
                 {deleting === profile.id ? '...' : 'Eliminar'}

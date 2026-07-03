@@ -220,8 +220,7 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
           <Badge tone="neutral">Unidad dada de baja</Badge>
         ) : !deactivateConfirm ? (
           <Button
-            variant="outline" size="sm"
-            style={{ borderColor: 'var(--status-danger)', color: 'var(--status-danger)' }}
+            variant="danger" size="sm"
             onClick={() => setDeactivateConfirm(true)}
           >
             Dar de baja
@@ -232,8 +231,7 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
               ¿Seguro? No se puede revertir desde el dashboard.
             </span>
             <Button
-              variant="primary" size="sm" disabled={deactivating}
-              style={{ background: 'var(--status-danger)' }}
+              variant="danger" size="sm" disabled={deactivating}
               onClick={doDeactivate}
             >
               {deactivating ? '...' : 'Sí, dar de baja'}

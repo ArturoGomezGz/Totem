@@ -103,7 +103,7 @@ export default function Units() {
               <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
                 <Badge tone="neutral">{TYPE_LABEL[unit.type] ?? unit.type}</Badge>
                 {unit.type === 'totem' && (
-                  <Badge tone={unit.active_profile_id ? 'blue' : 'neutral'}>
+                  <Badge tone={unit.active_profile_id ? 'blue' : 'warning'}>
                     {unit.active_profile_id ? (profileName(unit.active_profile_id) ?? '...') : 'Sin perfil'}
                   </Badge>
                 )}
