@@ -63,3 +63,8 @@ app.include_router(alerts.router,          prefix="/api/v1")
 app.include_router(telegram_router.router, prefix="/api/v1")
 app.include_router(live_router.router)
 app.include_router(internal.router)
+
+
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"status": "ok"}
