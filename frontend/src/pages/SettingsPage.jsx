@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, clearTokens } from '../api'
 import { clearActiveOrgId } from '../utils/activeOrg'
-import { Button, Card, Alert, Badge, Select } from '../design-system'
+import { Button, Card, Badge, Select } from '../design-system'
 import AppShell from '../components/AppShell'
 import TelegramLink from '../components/TelegramLink'
 import { useOrg } from '../contexts/OrgContext'
@@ -32,11 +32,10 @@ function DisabledRow({ label, hint }) {
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: 'var(--space-4)', background: 'var(--surface-fill)',
-      borderRadius: 'var(--radius-md)', opacity: 0.6,
+      padding: 'var(--space-3) var(--space-4)', opacity: 0.55,
     }}>
       <div>
-        <p style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)', fontSize: 'var(--text-sm)', color: 'var(--text-strong)', marginBottom: hint ? 'var(--space-1)' : 0 }}>
+        <p style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)', fontSize: 'var(--text-xs)', color: 'var(--text-strong)', marginBottom: hint ? 'var(--space-1)' : 0 }}>
           {label}
         </p>
         {hint && <p style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{hint}</p>}
@@ -51,7 +50,6 @@ export default function SettingsPage() {
   const { orgs, activeOrg, activeOrgId, switchOrg } = useOrg()
 
   const [selectedOrgId, setSelectedOrgId] = useState(activeOrgId ?? '')
-  const [switchMsg, setSwitchMsg]         = useState(null)
 
   const handleOrgSwitch = () => {
     switchOrg(selectedOrgId)
@@ -101,7 +99,7 @@ export default function SettingsPage() {
               label="Cambiar a"
               style={{ flex: 1 }}
               value={selectedOrgId}
-              onChange={e => { setSelectedOrgId(e.target.value); setSwitchMsg(null) }}
+              onChange={e => setSelectedOrgId(e.target.value)}
             >
               <option value="">Sin organización activa</option>
               {orgs.map(org => (
@@ -117,8 +115,6 @@ export default function SettingsPage() {
               Cambiar
             </Button>
           </div>
-
-          {switchMsg && <Alert tone="success" style={{ marginTop: 'var(--space-3)' }}>{switchMsg}</Alert>}
 
           <div style={{ marginTop: 'var(--space-4)' }}>
             <Button variant="ghost" size="sm" onClick={() => navigate('/organizations')}>
@@ -146,18 +142,14 @@ export default function SettingsPage() {
           title="Cuenta"
           description="Información y seguridad de tu cuenta."
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-            <DisabledRow label="Cambiar contraseña" hint="Actualiza la contraseña de acceso a tu cuenta." />
-            <DisabledRow label="Cambiar correo electrónico" hint="Modifica la dirección de correo asociada a tu cuenta." />
-          </div>
-          <div style={{ marginTop: 'var(--space-4)' }}>
-            <Button
-              variant="outline" size="sm"
-              style={{ borderColor: 'var(--status-danger)', color: 'var(--status-danger)' }}
-              onClick={logout}
-            >
+          <div style={{ marginBottom: 'var(--space-5)' }}>
+            <Button variant="danger" size="sm" onClick={logout}>
               Cerrar sesión
             </Button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <DisabledRow label="Cambiar contraseña" hint="Actualiza la contraseña de acceso a tu cuenta." />
+            <DisabledRow label="Cambiar correo electrónico" hint="Modifica la dirección de correo asociada a tu cuenta." />
           </div>
         </Section>
 

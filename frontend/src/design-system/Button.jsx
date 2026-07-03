@@ -28,6 +28,7 @@ export function Button({
   const s = sizes[size] || sizes.md
   const isOutline = variant === 'outline'
   const isGhost = variant === 'ghost'
+  const isDanger = variant === 'danger'
   const pal = palettes[variant] || palettes.primary
 
   let base = {
@@ -45,7 +46,10 @@ export function Button({
     transform: active && !disabled ? 'scale(0.98)' : 'none',
   }
 
-  if (isOutline) {
+  if (isDanger) {
+    base = { ...base, background: hover && !disabled ? 'var(--status-danger-fill)' : 'transparent',
+      color: 'var(--status-danger)', borderColor: 'var(--status-danger)' }
+  } else if (isOutline) {
     base = { ...base, background: hover && !disabled ? 'var(--blue-050)' : 'transparent',
       color: 'var(--blue-700)', borderColor: 'var(--blue-700)' }
   } else if (isGhost) {
