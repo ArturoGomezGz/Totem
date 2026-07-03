@@ -12,6 +12,7 @@ SUBSCRIPTIONS = [
     "totem/+/readings",
     "totem/+/events",
     "totem/+/alerts",
+    "totem/+/status",
 ]
 
 
@@ -76,6 +77,8 @@ class MQTTClient:
                 manager.broadcast_sync(unit_id, {"type": "state", **unit_state})
         elif kind == "alerts":
             self._persist_alert(unit_id, payload)
+        elif kind == "status":
+            self._persist_firmware_version(unit_id, payload)
 
     def _persist_reading(self, unit_id_str: str, payload: dict) -> None:
         db = SessionLocal()
@@ -92,6 +95,26 @@ class MQTTClient:
         except Exception as e:
             db.rollback()
             print(f"[mqtt] error persistiendo lectura: {e}")
+        finally:
+            db.close()
+
+    def _persist_firmware_version(self, unit_id_str: str, payload: dict) -> None:
+        version = payload.get("firmware_version")
+        if not version:
+            return
+
+        db = SessionLocal()
+        try:
+            unit = db.query(Unit).filter(Unit.id == unit_id_str).first()
+            if not unit:
+                print(f"[mqtt] status de unidad desconocida: {unit_id_str}")
+                return
+            unit.firmware_version = version
+            db.commit()
+            print(f"[mqtt] firmware_version actualizada — unidad {unit_id_str}: {version}")
+        except Exception as e:
+            db.rollback()
+            print(f"[mqtt] error persistiendo firmware_version: {e}")
         finally:
             db.close()
 

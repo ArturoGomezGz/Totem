@@ -1,5 +1,6 @@
 import hashlib
 import os
+import struct
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -16,6 +17,36 @@ from models import Command, FirmwareRelease, Unit, User
 from mqtt import mqtt_client
 
 router = APIRouter(tags=["firmware"])
+
+# Offset fijo del descriptor de aplicación en toda imagen de ESP-IDF:
+# esp_image_header_t (24 bytes) + esp_image_segment_header_t del primer
+# segmento (8 bytes) = 32. El campo `version` vive 16 bytes dentro del
+# esp_app_desc_t (magic_word[4] + secure_version[4] + reserv1[8]).
+_ESP_APP_DESC_OFFSET = 32
+_ESP_APP_DESC_MAGIC = 0xABCD5432
+_ESP_APP_VERSION_OFFSET = _ESP_APP_DESC_OFFSET + 16
+_ESP_APP_VERSION_LEN = 32
+
+
+def _extract_firmware_version(content: bytes) -> str:
+    """Lee la versión incrustada por ESP-IDF (version.txt en tiempo de build)
+    directamente de los bytes del binario — es la única fuente de verdad,
+    nadie la escribe a mano al publicar un release."""
+    if len(content) < _ESP_APP_VERSION_OFFSET + _ESP_APP_VERSION_LEN:
+        raise ValueError("El archivo es demasiado pequeño para ser una imagen válida de ESP-IDF")
+
+    magic_word = struct.unpack_from("<I", content, _ESP_APP_DESC_OFFSET)[0]
+    if magic_word != _ESP_APP_DESC_MAGIC:
+        raise ValueError(
+            "No se encontró el descriptor de aplicación de ESP-IDF en el binario "
+            "(magic word inválido) — ¿es un .bin compilado con ESP-IDF?"
+        )
+
+    raw = content[_ESP_APP_VERSION_OFFSET:_ESP_APP_VERSION_OFFSET + _ESP_APP_VERSION_LEN]
+    version = raw.split(b"\x00", 1)[0].decode("ascii", errors="replace").strip()
+    if not version:
+        raise ValueError("El binario no tiene una versión establecida — revisa version.txt y recompila")
+    return version
 
 
 # ---------- Schemas ----------
@@ -114,14 +145,18 @@ de la organización. Solo los administradores de la organización pueden subir r
 **¿Dónde se usa?**
 Flujo de release de firmware — acción "Publicar versión" del panel de administración.
 
-> **Nota:** `version` debe ser semántica (`1.2.0`). Es única dentro de la organización
-> — otra organización puede publicar su propia versión `1.2.0` sin chocar. Si ya existe
-> una versión con ese nombre en la misma organización, el endpoint devuelve 409 sin
-> sobrescribir el binario existente.
+> **Nota:** la versión NO se escribe a mano — se lee directamente del binario
+> subido (descriptor de aplicación incrustado por ESP-IDF a partir de
+> `version.txt` en tiempo de compilación). Es única dentro de la organización
+> — otra organización puede publicar su propia versión `1.2.0` sin chocar. Si
+> ya existe una versión con ese nombre en la misma organización, el endpoint
+> devuelve 409 sin sobrescribir el binario existente — hay que cambiar
+> `version.txt` y recompilar.
 """,
     response_model=FirmwareReleaseOut,
     status_code=201,
     responses={
+        400: {"description": "El binario no es una imagen válida de ESP-IDF o no tiene versión establecida"},
         401: {"description": "Token ausente, inválido o expirado"},
         403: {"description": "Solo los administradores pueden publicar firmware"},
         409: {"description": "Ya existe un release con esa versión en esta organización"},
@@ -129,13 +164,19 @@ Flujo de release de firmware — acción "Publicar versión" del panel de admini
 )
 async def upload_firmware(
     organization_id: str = Form(...),
-    version: str = Form(...),
     description: Optional[str] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_org_admin(organization_id, current_user, db)
+
+    content = await file.read()
+
+    try:
+        version = _extract_firmware_version(content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     existing = db.query(FirmwareRelease).filter(
         FirmwareRelease.organization_id == organization_id,
@@ -147,7 +188,6 @@ async def upload_firmware(
             detail=f"Ya existe un release para la versión {version} en esta organización",
         )
 
-    content = await file.read()
     sha256 = hashlib.sha256(content).hexdigest()
 
     org_dir = os.path.join(FIRMWARE_DIR, organization_id)
