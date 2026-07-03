@@ -106,6 +106,9 @@ export default function ProvisioningPanel({
               {copied ? 'Copiado' : 'Copiar contenido'}
             </Button>
           </div>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-3)' }}>
+            El archivo ya incluye la API Key — no necesitas copiarla por separado.
+          </p>
         </div>
       </Card>
     </>
