@@ -57,9 +57,9 @@ export default function TelegramLink() {
     }
   }
 
-  const copyToken = () => {
+  const copyCommand = () => {
     if (!token?.token) return
-    copyToClipboard(token.token).then(ok => {
+    copyToClipboard(`/vincular ${token.token}`).then(ok => {
       if (ok) {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
@@ -128,16 +128,13 @@ export default function TelegramLink() {
                 </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-bold)',
-                  fontSize: 'var(--text-xl)', color: 'var(--blue-900)',
-                  letterSpacing: '0.15em', flex: 1,
-                }}>
-                  {token.token}
-                </span>
-                <Button size="sm" variant="outline" onClick={copyToken}>{copied ? 'Copiado' : 'Copiar'}</Button>
-              </div>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-bold)',
+                fontSize: 'var(--text-xl)', color: 'var(--blue-900)',
+                letterSpacing: '0.15em',
+              }}>
+                {token.token}
+              </span>
 
               <div style={{ borderTop: '1px solid var(--blue-100)', paddingTop: 'var(--space-4)' }}>
                 <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)', marginBottom: 'var(--space-2)' }}>
@@ -148,14 +145,17 @@ export default function TelegramLink() {
                   }{' '}
                   en Telegram y escribe:
                 </p>
-                <code style={{
-                  display: 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
-                  background: 'var(--white)', border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)', padding: 'var(--space-3)',
-                  color: 'var(--blue-900)', letterSpacing: '0.05em',
-                }}>
-                  /vincular {token.token}
-                </code>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                  <code style={{
+                    display: 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
+                    background: 'var(--white)', border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-sm)', padding: 'var(--space-3)',
+                    color: 'var(--blue-900)', letterSpacing: '0.05em', flex: 1,
+                  }}>
+                    /vincular {token.token}
+                  </code>
+                  <Button size="sm" variant="outline" onClick={copyCommand}>{copied ? 'Copiado' : 'Copiar'}</Button>
+                </div>
               </div>
 
               <Button variant="ghost" size="sm" onClick={() => setToken(null)} style={{ alignSelf: 'flex-start' }}>
