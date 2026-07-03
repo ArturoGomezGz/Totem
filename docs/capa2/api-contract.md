@@ -16,6 +16,7 @@ La comunicación del sistema usa dos protocolos según el actor:
 | `totem/{unit_id}/readings` | Lectura de sensores (T, RH, Li, CO₂) | 1 |
 | `totem/{unit_id}/events` | Evento de bomba (ON/OFF, duración, trigger) | 1 |
 | `totem/{unit_id}/alerts` | Alerta crítica (tanque bajo, sensor desconectado, fallo de bomba) | 1 |
+| `totem/{unit_id}/status` | `{"firmware_version": "x.y.z"}` — retenido, publicado en cada conexión MQTT (incluyendo el reinicio tras un OTA). El server lo persiste en `Unit.firmware_version` | 1 |
 
 ### Topics a los que se suscriben los dispositivos
 
@@ -55,8 +56,7 @@ Todos los endpoints usan el prefijo `/api/v1/`. Ver decisión y justificación d
 | `GET`  | `/api/v1/alerts` | Historial de alertas (con filtros por unidad y estado) |
 | `GET`  | `/api/v1/firmware` | Listar releases de firmware de la organización |
 | `POST` | `/api/v1/firmware` | Subir un nuevo compilado (binario + versión + descripción) — solo admins |
-| `POST` | `/api/v1/units/{unit_id}/firmware` | Aplicar un release a una unidad — crea el `command` `update_firmware` y actualiza `target_firmware_release_id` |
-| `POST` | `/api/v1/organizations/{organization_id}/firmware` | Aplicar un release a todas las unidades tipo `totem` de la organización (fan-out) |
+| `POST` | `/api/v1/firmware/{firmware_release_id}/deploy` | Aplicar un release — body `{"unit_id": ...}` para una sola unidad o `{"organization_id": ...}` para todas las unidades tipo `totem` de la organización (fan-out). Crea el `command` `update_firmware` y actualiza `target_firmware_release_id` — solo admins |
 | `POST` | `/api/v1/auth/login` | Login de usuario — devuelve JWT + refresh token |
 
 ---

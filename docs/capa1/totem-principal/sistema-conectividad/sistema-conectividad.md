@@ -19,6 +19,7 @@ El ESP32 mantiene una conexión persistente con el broker Mosquitto. Al conectar
 | `totem/{unit_id}/readings` | Lectura de sensores (T, RH, Li, CO₂) | 1 |
 | `totem/{unit_id}/events` | Evento de bomba (ON/OFF, duración, trigger) | 1 |
 | `totem/{unit_id}/alerts` | Alerta crítica (tanque bajo, sensor desconectado, fallo de bomba) | 1 |
+| `totem/{unit_id}/status` | `{"firmware_version": "x.y.z"}` — retenido (retain=1), publicado al conectar (incluye el reinicio tras un OTA). Es como el server se entera de qué versión corre realmente el dispositivo | 1 |
 
 **Topics a los que se suscribe el ESP32:**
 
@@ -38,11 +39,19 @@ Almacena lecturas y eventos en flash cuando no hay WiFi. Al reconectar y reestab
 
 ### OTA (Over The Air)
 
+**Probado end-to-end en hardware físico** (ESP32-C6, no solo en el simulador de software) — incluyendo la actualización real de una versión a otra vía OTA.
+
 El ESP32 recibe la notificación de nueva versión via topic MQTT (`totem/{unit_id}/ota`). La descarga del binario se hace via HTTP — MQTT no es adecuado para payloads grandes.
 
 **Verificación de integridad:** hash SHA-256 del binario incluido en la notificación MQTT. El ESP32 verifica el hash antes de aplicar la actualización.
 
 **Firma criptográfica:** diferida para post-MVP. El hash es suficiente para las primeras unidades en campo — la firma agrega valor cuando el sistema escala a instalaciones no supervisadas o infraestructura compartida.
+
+**Confirmación de versión (reporte de estado):** tras aplicar un OTA y reiniciar, el dispositivo publica su versión al topic `totem/{unit_id}/status` (ver tabla arriba) apenas reconecta al broker. Así el dashboard puede comparar la versión reportada contra `target_firmware_release_id` (la que se quiso aplicar) y mostrar "al día" o "actualización pendiente". Antes de esto, la columna `firmware_version` en la base de datos nunca se llenaba — el dispositivo no confirmaba nada de vuelta.
+
+**Rollback automático (anti-rollback de ESP-IDF):** si tras un OTA el nuevo firmware no logra conectar a WiFi/MQTT dentro de un margen (90 s), el bootloader revierte automáticamente a la partición anterior conocida como válida — evita dejar una unidad en campo inaccesible por un binario con bug. Requiere `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` (ver `sdkconfig.defaults.example`).
+
+**Firmware base de fábrica (`firmware/bootstrap`):** para evitar tener que reflashear por USB cada vez que cambia la lógica de sensores/riego, existe un binario mínimo (`firmware/bootstrap`) que solo conecta, reporta su versión (`1.0.0`) y espera el primer OTA. Es el único binario que se flashea físicamente en una unidad nueva — todo lo demás (incluidas futuras versiones del firmware con funcionalidad real, hoy en `firmware/simulator`) llega por OTA. Comparte el mismo mecanismo de NVS/provisioning y de rollback que el firmware completo.
 
 ### Last Will and Testament (LWT)
 
@@ -86,7 +95,7 @@ unit_id,data,string,uuid-del-dispositivo
 api_key,data,string,api-key-generada
 ```
 
-**Estado actual (simulador):** el simulador usa `Kconfig` (`sdkconfig`) en lugar de NVS — las credenciales se definen en `sdkconfig.defaults` y nunca tocan el código fuente. Es válido para desarrollo porque sim-001 y sim-002 tienen credenciales fijas conocidas. **No es válido para unidades de producción.**
+**Estado actual:** `firmware/simulator` (y `firmware/bootstrap`) ya usan NVS real para las credenciales — no Kconfig. El flujo de provisioning descrito arriba está implementado y probado en hardware físico (ESP32-C6), no solo en el simulador de software. Ver `firmware/simulator/PROVISIONING.md` para el procedimiento paso a paso.
 
 ---
 
