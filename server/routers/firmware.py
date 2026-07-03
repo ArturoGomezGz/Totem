@@ -9,10 +9,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from auth import get_current_user
+from auth import get_current_user, require_org_admin, require_org_membership
 from config import FIRMWARE_DIR, SERVER_URL
 from db import get_db
-from models import Command, FirmwareRelease, Membership, Unit, User
+from models import Command, FirmwareRelease, Unit, User
 from mqtt import mqtt_client
 
 router = APIRouter(tags=["firmware"])
@@ -39,23 +39,6 @@ class DeployIn(BaseModel):
 
 
 # ---------- Helpers ----------
-
-def _require_org_membership(organization_id: str, current_user: User, db: Session) -> Membership:
-    membership = db.query(Membership).filter(
-        Membership.user_id == current_user.id,
-        Membership.organization_id == organization_id,
-    ).first()
-    if not membership:
-        raise HTTPException(status_code=403, detail="No perteneces a esta organización")
-    return membership
-
-
-def _require_org_admin(organization_id: str, current_user: User, db: Session) -> Membership:
-    membership = _require_org_membership(organization_id, current_user, db)
-    if membership.role != "admin":
-        raise HTTPException(status_code=403, detail="Solo los administradores pueden gestionar firmware")
-    return membership
-
 
 def _release_to_out(r: FirmwareRelease) -> FirmwareReleaseOut:
     return FirmwareReleaseOut(
@@ -104,7 +87,7 @@ def list_firmware(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _require_org_membership(organization_id, current_user, db)
+    require_org_membership(organization_id, current_user, db)
 
     releases = (
         db.query(FirmwareRelease)
@@ -152,7 +135,7 @@ async def upload_firmware(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _require_org_admin(organization_id, current_user, db)
+    require_org_admin(organization_id, current_user, db)
 
     existing = db.query(FirmwareRelease).filter(
         FirmwareRelease.organization_id == organization_id,
@@ -294,14 +277,17 @@ def deploy_firmware(
         if str(unit.organization_id) != str(release.organization_id):
             raise HTTPException(status_code=404, detail="El release no pertenece a la organización de esta unidad")
 
-        _require_org_admin(str(unit.organization_id), current_user, db)
+        require_org_admin(str(unit.organization_id), current_user, db)
 
         _deploy_to_unit(unit, release, payload, current_user, db)
         db.commit()
         return {"detail": f"Firmware {release.version} aplicado a unidad {body.unit_id}", "version": release.version}
 
     # Por organización — todas las unidades activas tipo totem
-    _require_org_admin(body.organization_id, current_user, db)
+    require_org_admin(body.organization_id, current_user, db)
+
+    if str(release.organization_id) != str(body.organization_id):
+        raise HTTPException(status_code=404, detail="El release no pertenece a esta organización")
 
     units = db.query(Unit).filter(
         Unit.organization_id == body.organization_id,

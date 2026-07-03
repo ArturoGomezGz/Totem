@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from config import JWT_ALGORITHM, JWT_EXPIRE_MINUTES, JWT_SECRET, REFRESH_TOKEN_EXPIRE_DAYS
 from db import get_db
-from models import RefreshToken, User
+from models import Membership, RefreshToken, User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer()
@@ -57,3 +57,20 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="Token inválido")
     return user
+
+
+def require_org_membership(organization_id: str, current_user: User, db: Session) -> Membership:
+    membership = db.query(Membership).filter(
+        Membership.user_id == current_user.id,
+        Membership.organization_id == organization_id,
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="No perteneces a esta organización")
+    return membership
+
+
+def require_org_admin(organization_id: str, current_user: User, db: Session) -> Membership:
+    membership = require_org_membership(organization_id, current_user, db)
+    if membership.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo los administradores pueden realizar esta acción")
+    return membership
