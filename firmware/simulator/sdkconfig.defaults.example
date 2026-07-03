@@ -6,6 +6,11 @@
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
+# partitions.csv ocupa 4MB exactos (nvs+otadata+ota_0+ota_1+spiffs) — el
+# default de ESP-IDF es 2MB, insuficiente.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
 # Rollback automático: si un OTA no llega a confirmarse (ver
 # simulator.c — pending_rollback_confirm / rollback_watchdog_task),
 # el bootloader revierte solo a la partición anterior conocida como válida.
