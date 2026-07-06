@@ -58,7 +58,17 @@ export default function Organizations() {
               </p>
               <Badge tone="neutral">{org.role}</Badge>
             </div>
-            <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1 }}>›</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+              {org.role === 'admin' && (
+                <Button
+                  variant="outline" size="sm"
+                  onClick={e => { e.stopPropagation(); navigate(`/organizations/${org.id}/members`) }}
+                >
+                  Miembros
+                </Button>
+              )}
+              <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1 }}>›</span>
+            </div>
           </Card>
         ))}
       </div>

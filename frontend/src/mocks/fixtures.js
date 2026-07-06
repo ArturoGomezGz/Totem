@@ -36,6 +36,13 @@ export function seedOrganizations() {
   ]
 }
 
+export function seedMembers() {
+  return [
+    { user_id: 'user-demo', organization_id: 'org-demo', email: 'admin@demo.com', role: 'admin', joined_at: hoursAgo(24 * 20) },
+    { user_id: 'user-demo-2', organization_id: 'org-demo', email: 'operador@demo.com', role: 'member', joined_at: hoursAgo(24 * 5) },
+  ]
+}
+
 export function seedUnits() {
   return [
     {
