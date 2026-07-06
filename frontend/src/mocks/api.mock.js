@@ -235,6 +235,16 @@ export const mockApi = {
       version: release.version, units: units.map(u => u.id),
     }
   },
+  deleteFirmware: async (release_id) => {
+    await delay()
+    const idx = store.firmwareReleases.findIndex(r => r.id === release_id)
+    if (idx === -1) return notFound('Release no encontrado')
+    store.firmwareReleases.splice(idx, 1)
+    store.units.forEach(u => {
+      if (u.target_firmware_release_id === release_id) u.target_firmware_release_id = null
+    })
+    return null
+  },
 }
 
 // Helper de desarrollo: genera más lecturas para una unidad desde la consola

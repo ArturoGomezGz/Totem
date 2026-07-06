@@ -264,6 +264,50 @@ def download_firmware(
     )
 
 
+@router.delete(
+    "/firmware/{firmware_release_id}",
+    summary="Eliminar una versión de firmware",
+    description="""
+**¿Qué hace?**
+Borra el binario del filesystem y el registro del release. Si alguna unidad
+tenía este release como `target_firmware_release_id`, esa referencia queda en
+`NULL` automáticamente (`ON DELETE SET NULL`) — no rompe nada, la unidad
+simplemente deja de tener una versión objetivo.
+
+**¿Para qué?**
+Limpiar releases subidos por error o que ya no se van a usar (ej. un binario
+corrupto o una versión de prueba). No afecta el historial de comandos
+`update_firmware` ya emitidos — esos guardan la versión, URL y hash en su
+propio payload, independientes del release.
+
+**¿Dónde se usa?**
+Panel de administración de firmware — acción "Eliminar" sobre un release.
+""",
+    status_code=204,
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "Solo los administradores pueden eliminar firmware"},
+        404: {"description": "Release no encontrado"},
+    },
+)
+def delete_firmware(
+    firmware_release_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    release = db.query(FirmwareRelease).filter(FirmwareRelease.id == firmware_release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release no encontrado")
+
+    require_org_admin(str(release.organization_id), current_user, db)
+
+    if os.path.exists(release.binary_path):
+        os.remove(release.binary_path)
+
+    db.delete(release)
+    db.commit()
+
+
 @router.post(
     "/firmware/{firmware_release_id}/deploy",
     summary="Aplicar un release de firmware a una unidad o a toda la organización",

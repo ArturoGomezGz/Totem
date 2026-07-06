@@ -21,8 +21,7 @@ function shortSha(sha) {
   return `${sha.slice(0, 8)}…${sha.slice(-6)}`
 }
 
-function DeployRow({ release, units, onDeployed }) {
-  const [open, setOpen]           = useState(false)
+function DeployRow({ release, units, open, onOpen, onClose, onDeployed }) {
   const [scope, setScope]         = useState('org')
   const [unitId, setUnitId]       = useState(units[0]?.id ?? '')
   const [deploying, setDeploying] = useState(false)
@@ -38,17 +37,15 @@ function DeployRow({ release, units, onDeployed }) {
         : { unit_id: unitId }
       const res = await api.deployFirmware(release.id, target)
       onDeployed(res?.detail ?? 'Firmware aplicado')
-      setOpen(false)
     } catch (err) {
       setError(err.message)
-    } finally {
       setDeploying(false)
     }
   }
 
   if (!open) {
     return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" size="sm" onClick={onOpen}>
         Aplicar
       </Button>
     )
@@ -79,7 +76,7 @@ function DeployRow({ release, units, onDeployed }) {
       )}
 
       <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-        <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={deploying}>
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={deploying}>
           Cancelar
         </Button>
         <Button
@@ -87,6 +84,54 @@ function DeployRow({ release, units, onDeployed }) {
           disabled={deploying || (!isOrgWide && !unitId)}
         >
           {deploying ? 'Aplicando...' : isOrgWide ? 'Sí, aplicar a toda la organización' : 'Confirmar'}
+        </Button>
+      </div>
+      {error && <Alert tone="danger" style={{ width: '100%' }}>{error}</Alert>}
+    </div>
+  )
+}
+
+function DeleteReleaseButton({ release, pendingCount, open, onOpen, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError]       = useState(null)
+
+  const doDelete = async () => {
+    setDeleting(true); setError(null)
+    try {
+      await api.deleteFirmware(release.id)
+      onDeleted()
+    } catch (err) {
+      setError(err.message)
+      setDeleting(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button variant="ghost" size="sm" style={{ color: 'var(--status-danger)' }} onClick={onOpen}>
+        Eliminar
+      </Button>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', alignItems: 'flex-end', maxWidth: 320 }}>
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)', textAlign: 'right' }}>
+        ¿Eliminar v{release.version}? No se puede deshacer.
+      </p>
+      {pendingCount > 0 && (
+        <Alert tone="warning" style={{ width: '100%' }}>
+          {pendingCount} unidad{pendingCount === 1 ? '' : 'es'} tiene{pendingCount === 1 ? '' : 'n'} esta versión
+          como actualización pendiente. Al eliminarla, esa actualización pendiente se cancela (las unidades no
+          se ven afectadas si ya la instalaron).
+        </Alert>
+      )}
+      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={deleting}>
+          Cancelar
+        </Button>
+        <Button variant="danger" size="sm" onClick={doDelete} disabled={deleting}>
+          {deleting ? 'Eliminando...' : 'Sí, eliminar'}
         </Button>
       </div>
       {error && <Alert tone="danger" style={{ width: '100%' }}>{error}</Alert>}
@@ -106,6 +151,10 @@ export default function Firmware() {
   const [form, setForm]             = useState({ description: '', file: null })
   const [uploading, setUploading]   = useState(false)
   const [uploadError, setUploadError] = useState(null)
+
+  // Solo una acción (aplicar o eliminar) puede estar expandida a la vez,
+  // por release — evita estados combinados confusos en la misma card.
+  const [activeAction, setActiveAction] = useState(null) // { releaseId, type: 'deploy' | 'delete' }
 
   const load = async () => {
     if (!activeOrgId) return
@@ -277,6 +326,9 @@ export default function Firmware() {
           {releases.map(release => {
             const pendingUnits = units.filter(u => u.target_firmware_release_id !== release.id)
             const allTargeted = units.length > 0 && pendingUnits.length === 0
+            const targetingCount = units.length - pendingUnits.length
+            const isDeployOpen = activeAction?.releaseId === release.id && activeAction.type === 'deploy'
+            const isDeleteOpen = activeAction?.releaseId === release.id && activeAction.type === 'delete'
             return (
               <Card key={release.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -301,7 +353,26 @@ export default function Firmware() {
                     Publicado {new Date(release.released_at).toLocaleString('es')}
                   </p>
                 </div>
-                <DeployRow release={release} units={units} onDeployed={msg => { setNotice(msg); load() }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
+                  {!isDeleteOpen && (
+                    <DeployRow
+                      release={release} units={units}
+                      open={isDeployOpen}
+                      onOpen={() => setActiveAction({ releaseId: release.id, type: 'deploy' })}
+                      onClose={() => setActiveAction(null)}
+                      onDeployed={msg => { setNotice(msg); setActiveAction(null); load() }}
+                    />
+                  )}
+                  {!isDeployOpen && (
+                    <DeleteReleaseButton
+                      release={release} pendingCount={targetingCount}
+                      open={isDeleteOpen}
+                      onOpen={() => setActiveAction({ releaseId: release.id, type: 'delete' })}
+                      onClose={() => setActiveAction(null)}
+                      onDeleted={() => { setNotice(`Versión ${release.version} eliminada.`); setActiveAction(null); load() }}
+                    />
+                  )}
+                </div>
               </Card>
             )
           })}

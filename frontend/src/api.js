@@ -107,6 +107,7 @@ const realApi = {
     return data
   },
   deployFirmware: (release_id, target) => request('POST', `/firmware/${release_id}/deploy`, target),
+  deleteFirmware: (release_id) => request('DELETE', `/firmware/${release_id}`),
 }
 
 export const api = import.meta.env.VITE_USE_MOCKS === 'true' ? mockApi : realApi
