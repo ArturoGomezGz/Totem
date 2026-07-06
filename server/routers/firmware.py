@@ -197,6 +197,18 @@ async def upload_firmware(
     with open(binary_path, "wb") as f:
         f.write(content)
 
+    # Verificar que lo que quedó en disco es exactamente lo que se subió —
+    # sin esto, una escritura truncada/corrupta pasa desapercibida hasta que
+    # un dispositivo intenta el OTA y falla la verificación de SHA-256.
+    with open(binary_path, "rb") as f:
+        written = f.read()
+    if hashlib.sha256(written).hexdigest() != sha256:
+        os.remove(binary_path)
+        raise HTTPException(
+            status_code=500,
+            detail="Error al guardar el binario en el servidor — vuelve a intentar la subida",
+        )
+
     release = FirmwareRelease(
         id=uuid.uuid4(),
         organization_id=organization_id,
