@@ -38,6 +38,42 @@ export const mockApi = {
     return org
   },
 
+  // ---------- Members ----------
+  getMembers: async (organization_id) => {
+    await delay()
+    return store.members.filter(m => m.organization_id === organization_id)
+  },
+  addMember: async (organization_id, email, role) => {
+    await delay()
+    const existing = store.members.find(m => m.organization_id === organization_id && m.email === email)
+    if (existing) return notFound('El usuario ya es miembro de esta organización')
+    const member = { user_id: uid(), organization_id, email, role: role || 'member', joined_at: new Date().toISOString() }
+    store.members.push(member)
+    return member
+  },
+  updateMemberRole: async (organization_id, user_id, role) => {
+    await delay()
+    const member = store.members.find(m => m.organization_id === organization_id && m.user_id === user_id)
+    if (!member) return notFound('El usuario no es miembro de esta organización')
+    const admins = store.members.filter(m => m.organization_id === organization_id && m.role === 'admin')
+    if (member.role === 'admin' && role !== 'admin' && admins.length <= 1) {
+      return notFound('No puedes quitar al último administrador de la organización')
+    }
+    member.role = role
+    return member
+  },
+  removeMember: async (organization_id, user_id) => {
+    await delay()
+    const member = store.members.find(m => m.organization_id === organization_id && m.user_id === user_id)
+    if (!member) return notFound('El usuario no es miembro de esta organización')
+    const admins = store.members.filter(m => m.organization_id === organization_id && m.role === 'admin')
+    if (member.role === 'admin' && admins.length <= 1) {
+      return notFound('No puedes quitar al último administrador de la organización')
+    }
+    store.members = store.members.filter(m => !(m.organization_id === organization_id && m.user_id === user_id))
+    return null
+  },
+
   // ---------- Units ----------
   getUnits: async (organization_id) => {
     await delay()

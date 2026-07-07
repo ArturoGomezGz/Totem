@@ -51,6 +51,11 @@ const realApi = {
   getOrganizations: ()                   => request('GET',  '/organizations'),
   createOrganization: (name)             => request('POST', '/organizations',  { name }),
 
+  getMembers:      (organization_id)              => request('GET',    `/organizations/${organization_id}/members`),
+  addMember:        (organization_id, email, role) => request('POST',   `/organizations/${organization_id}/members`, { email, role }),
+  updateMemberRole: (organization_id, user_id, role) => request('PATCH', `/organizations/${organization_id}/members/${user_id}`, { role }),
+  removeMember:     (organization_id, user_id)      => request('DELETE', `/organizations/${organization_id}/members/${user_id}`),
+
   getUnits:         (organization_id)    => request('GET',  `/units?organization_id=${organization_id}`),
   createUnit:       (body)               => request('POST', '/units', body),
   getUnit:          (unit_id)            => request('GET',  `/units/${unit_id}`),
