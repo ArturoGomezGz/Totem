@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { Button, Card, Badge, Alert } from '../design-system'
+import { Button, Card, Badge, Alert, StatusDot } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useOrg } from '../contexts/OrgContext'
+import { OFFLINE_MS } from '../hooks/useUnitWebSocket'
+
+const isUnitOnline = (unit) =>
+  !!unit.last_seen && Date.now() - new Date(unit.last_seen).getTime() <= OFFLINE_MS
 
 const TYPE_LABEL = { totem: 'Totem', supply_tank: 'Tanque de suministro' }
 
@@ -106,9 +110,14 @@ export default function Units() {
           >
             <div>
               <p style={{
+                display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
                 fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
                 fontSize: 'var(--text-base)', color: 'var(--text-strong)', marginBottom: 'var(--space-2)',
               }}>
+                <StatusDot
+                  tone={isUnitOnline(unit) ? 'success' : 'neutral'}
+                  title={isUnitOnline(unit) ? 'En línea' : 'Sin señal'}
+                />
                 {unit.name}
               </p>
               <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>

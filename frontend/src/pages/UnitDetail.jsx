@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api'
-import { Button, Card, StatCard, Badge, Alert, Tabs } from '../design-system'
+import { Button, Card, StatCard, Badge, Alert, Tabs, StatusDot } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useUnitWebSocket } from '../hooks/useUnitWebSocket'
 import { useOrg } from '../contexts/OrgContext'
@@ -86,16 +86,16 @@ export default function UnitDetail() {
     ? new Date(unit.last_seen).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
     : null
 
-  const connectionBadge = !wsConnected
-    ? <Badge tone="neutral">Reconectando</Badge>
-    : !unit
-      ? <Badge tone="neutral">Esperando...</Badge>
-      : isOffline
-        ? <Badge tone="warning">Sin señal</Badge>
-        : <Badge tone="success">En línea</Badge>
+  const isOnline = wsConnected && !!unit && !isOffline
+  const connectionBadge = (
+    <StatusDot
+      tone={isOnline ? 'success' : 'neutral'}
+      title={isOnline ? 'En línea' : !wsConnected ? 'Reconectando' : !unit ? 'Esperando...' : 'Sin señal'}
+    />
+  )
 
   return (
-    <AppShell wide navRight={connectionBadge}>
+    <AppShell wide>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
         <h2 style={{
           fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
@@ -103,6 +103,7 @@ export default function UnitDetail() {
         }}>
           {unitMeta?.name ?? 'Cargando...'}
         </h2>
+        {connectionBadge}
         {unitMeta?.type === 'totem' && (
           <Badge tone={activeProfile ? 'blue' : 'neutral'}>
             {activeProfile ? activeProfile.name : 'Sin perfil'}

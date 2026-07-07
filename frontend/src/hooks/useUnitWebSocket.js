@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useUnitWebSocketMock } from '../mocks/useUnitWebSocket.mock'
 
-const OFFLINE_MS = 35000
+export const OFFLINE_MS = 35000
 const WS_RECONNECT_MS = 3000
 
 function useUnitWebSocketReal(unitId) {
