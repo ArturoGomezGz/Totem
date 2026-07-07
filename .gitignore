@@ -11,3 +11,8 @@ deploy/mosquitto/config/passwd
 # Frontend
 frontend/node_modules/
 frontend/dist/
+
+# Particiones NVS de aprovisionamiento — contienen credenciales reales
+# (wifi_pass, api_key) de una unidad física específica, nunca deben commitearse
+/nvs.bin
+/firmware/nvs.bin
