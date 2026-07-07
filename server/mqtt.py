@@ -83,14 +83,18 @@ class MQTTClient:
     def _persist_reading(self, unit_id_str: str, payload: dict) -> None:
         db = SessionLocal()
         try:
+            now = datetime.now(timezone.utc)
             db.add(Reading(
                 unit_id=uuid.UUID(unit_id_str),
-                timestamp=datetime.now(timezone.utc),
+                timestamp=now,
                 temperature=payload.get("temperature"),
                 humidity=payload.get("humidity"),
                 light=payload.get("light"),
                 co2=payload.get("co2"),
             ))
+            unit = db.query(Unit).filter(Unit.id == unit_id_str).first()
+            if unit:
+                unit.last_seen = now
             db.commit()
         except Exception as e:
             db.rollback()
