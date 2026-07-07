@@ -8,5 +8,10 @@ cmake_minimum_required(VERSION 3.16)
 # "d528eab-dirty" en vez de la versión real declarada en version.txt.
 set(PROJECT_VER_FILE "${CMAKE_CURRENT_LIST_DIR}/version.txt")
 
+# Componentes compartidos entre proyectos de firmware — ver
+# firmware/NON-NEGOTIABLES.md sección 10. simulator solo necesita totem_core
+# (genera lecturas sintéticas, no usa el driver de sensor real).
+set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(simulator)

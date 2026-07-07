@@ -1,30 +1,19 @@
+// Firmware con lecturas sintéticas — genera datos como si fuera un ESP32
+// real, sin sensores físicos. Útil para desarrollar el stack del server sin
+// hardware.
+//
+// WiFi/NVS/OTA/rollback vienen de firmware/components/totem_core — ver
+// firmware/NON-NEGOTIABLES.md para el contrato completo que cualquier
+// firmware nuevo debe respetar.
 #include <string.h>
-#include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
 #include "esp_log.h"
 #include "esp_random.h"
-#include "esp_ota_ops.h"
-#include "esp_http_client.h"
 #include "nvs_flash.h"
-#include "nvs.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
-#include "mbedtls/md.h"
-
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT      BIT1
-#define WIFI_MAX_RETRIES   5
-
-#define OTA_BUF_SIZE       4096
-
-// Margen para confirmar que el firmware recién aplicado por OTA arrancó bien
-// (WiFi + MQTT) antes de que el bootloader lo revierta automáticamente.
-#define ROLLBACK_CONFIRM_TIMEOUT_MS   90000
+#include "totem_core.h"
 
 // Parámetros del modelo de temperatura
 #define TEMP_BASE       20.0f   // temperatura inicial
@@ -35,19 +24,9 @@
 #define TEMP_DROP_RATE   1.4f   // °C por ciclo con bomba encendida (~1 min de 28 a 20)
 
 static const char *TAG = "simulator";
-static EventGroupHandle_t wifi_events;
-static int retry_count = 0;
 static esp_mqtt_client_handle_t mqtt_client = NULL;
-static bool ota_in_progress = false;
 static volatile bool pump_on = false;
-static volatile bool pending_rollback_confirm = false;
-
-// Credenciales cargadas desde NVS al arrancar
-static char wifi_ssid[64];
-static char wifi_pass[64];
-static char mqtt_uri[128];
-static char unit_id[64];
-static char api_key[128];
+static totem_config_t config;
 
 // Topics MQTT — construidos después de cargar unit_id desde NVS
 static char topic_readings[96];
@@ -57,281 +36,6 @@ static char topic_events[96];
 static char topic_ota[96];
 static char topic_profile[96];
 static char topic_status[96];
-
-// ============================================================
-// NVS
-// ============================================================
-
-static void load_config_from_nvs(void)
-{
-    nvs_handle_t nvs;
-    esp_err_t err = nvs_open("config", NVS_READONLY, &nvs);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "NVS no inicializado o namespace 'config' ausente (err 0x%x)", err);
-        ESP_LOGE(TAG, "Provisionar el dispositivo: ver firmware/simulator/nvs_config.csv.example");
-        esp_restart();
-    }
-
-    size_t len;
-
-    len = sizeof(wifi_ssid);  ESP_ERROR_CHECK(nvs_get_str(nvs, "wifi_ssid", wifi_ssid, &len));
-    len = sizeof(wifi_pass);  ESP_ERROR_CHECK(nvs_get_str(nvs, "wifi_pass", wifi_pass, &len));
-    len = sizeof(mqtt_uri);   ESP_ERROR_CHECK(nvs_get_str(nvs, "mqtt_uri",  mqtt_uri,  &len));
-    len = sizeof(unit_id);    ESP_ERROR_CHECK(nvs_get_str(nvs, "unit_id",   unit_id,   &len));
-    len = sizeof(api_key);    ESP_ERROR_CHECK(nvs_get_str(nvs, "api_key",   api_key,   &len));
-
-    nvs_close(nvs);
-
-    snprintf(topic_readings, sizeof(topic_readings), "totem/%s/readings", unit_id);
-    snprintf(topic_commands, sizeof(topic_commands), "totem/%s/commands", unit_id);
-    snprintf(topic_alerts,   sizeof(topic_alerts),   "totem/%s/alerts",   unit_id);
-    snprintf(topic_events,   sizeof(topic_events),   "totem/%s/events",   unit_id);
-    snprintf(topic_ota,      sizeof(topic_ota),      "totem/%s/ota",      unit_id);
-    snprintf(topic_profile,  sizeof(topic_profile),  "totem/%s/profile",  unit_id);
-    snprintf(topic_status,   sizeof(topic_status),   "totem/%s/status",   unit_id);
-
-    ESP_LOGI(TAG, "Config cargada — unit_id: %s, broker: %s", unit_id, mqtt_uri);
-}
-
-// ============================================================
-// WiFi
-// ============================================================
-
-static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
-{
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (retry_count < WIFI_MAX_RETRIES) {
-            esp_wifi_connect();
-            retry_count++;
-            ESP_LOGI(TAG, "Reintentando WiFi (%d/%d)", retry_count, WIFI_MAX_RETRIES);
-        } else {
-            xEventGroupSetBits(wifi_events, WIFI_FAIL_BIT);
-        }
-    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *) data;
-        ESP_LOGI(TAG, "IP obtenida: " IPSTR, IP2STR(&event->ip_info.ip));
-        retry_count = 0;
-        xEventGroupSetBits(wifi_events, WIFI_CONNECTED_BIT);
-    }
-}
-
-static void wifi_init(void)
-{
-    wifi_events = xEventGroupCreate();
-
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler, NULL, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_event_handler, NULL, NULL));
-
-    wifi_config_t wifi_config = {};
-    strncpy((char *)wifi_config.sta.ssid,     wifi_ssid, sizeof(wifi_config.sta.ssid));
-    strncpy((char *)wifi_config.sta.password,  wifi_pass, sizeof(wifi_config.sta.password));
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    EventBits_t bits = xEventGroupWaitBits(wifi_events,
-        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
-
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "WiFi conectado");
-    } else {
-        ESP_LOGE(TAG, "Fallo al conectar a WiFi");
-    }
-}
-
-// ============================================================
-// OTA
-// ============================================================
-
-typedef struct {
-    char url[256];
-    char sha256[65];
-    char version[32];
-} ota_task_params_t;
-
-static void ota_task(void *pvParameters)
-{
-    ota_task_params_t *params = (ota_task_params_t *)pvParameters;
-    esp_err_t err;
-
-    ESP_LOGI(TAG, "OTA: iniciando actualización a versión %s", params->version);
-    ESP_LOGI(TAG, "OTA: URL: %s", params->url);
-
-    const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
-    if (!update_partition) {
-        ESP_LOGE(TAG, "OTA: no hay partición disponible");
-        goto ota_fail;
-    }
-    ESP_LOGI(TAG, "OTA: escribiendo en partición %s", update_partition->label);
-
-    mbedtls_md_context_t sha256_ctx;
-    mbedtls_md_init(&sha256_ctx);
-    mbedtls_md_setup(&sha256_ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 0);
-    mbedtls_md_starts(&sha256_ctx);
-
-    esp_ota_handle_t ota_handle = 0;
-    err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &ota_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "OTA begin: %s", esp_err_to_name(err));
-        mbedtls_md_free(&sha256_ctx);
-        goto ota_fail;
-    }
-
-    esp_http_client_config_t http_cfg = {
-        .url        = params->url,
-        .timeout_ms = 30000,
-    };
-    esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
-
-    err = esp_http_client_open(client, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "OTA HTTP open: %s", esp_err_to_name(err));
-        mbedtls_md_free(&sha256_ctx);
-        esp_ota_abort(ota_handle);
-        esp_http_client_cleanup(client);
-        goto ota_fail;
-    }
-
-    int content_length = esp_http_client_fetch_headers(client);
-    ESP_LOGI(TAG, "OTA: tamaño del binario: %d bytes", content_length);
-
-    uint8_t *buf = malloc(OTA_BUF_SIZE);
-    if (!buf) {
-        ESP_LOGE(TAG, "OTA: sin memoria para buffer");
-        mbedtls_md_free(&sha256_ctx);
-        esp_ota_abort(ota_handle);
-        esp_http_client_cleanup(client);
-        goto ota_fail;
-    }
-
-    int total_written = 0;
-    while (1) {
-        int read_len = esp_http_client_read(client, (char *)buf, OTA_BUF_SIZE);
-        if (read_len < 0) {
-            ESP_LOGE(TAG, "OTA: error HTTP al leer");
-            free(buf);
-            mbedtls_md_free(&sha256_ctx);
-            esp_ota_abort(ota_handle);
-            esp_http_client_cleanup(client);
-            goto ota_fail;
-        }
-        if (read_len == 0) break;
-
-        mbedtls_md_update(&sha256_ctx, buf, read_len);
-
-        err = esp_ota_write(ota_handle, buf, read_len);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "OTA write: %s", esp_err_to_name(err));
-            free(buf);
-            mbedtls_md_free(&sha256_ctx);
-            esp_ota_abort(ota_handle);
-            esp_http_client_cleanup(client);
-            goto ota_fail;
-        }
-
-        total_written += read_len;
-        ESP_LOGI(TAG, "OTA: %d / %d bytes", total_written, content_length);
-    }
-
-    free(buf);
-    esp_http_client_cleanup(client);
-
-    uint8_t sha256_result[32];
-    mbedtls_md_finish(&sha256_ctx, sha256_result);
-    mbedtls_md_free(&sha256_ctx);
-
-    char sha256_hex[65];
-    for (int i = 0; i < 32; i++) {
-        snprintf(sha256_hex + i * 2, 3, "%02x", sha256_result[i]);
-    }
-    sha256_hex[64] = '\0';
-
-    if (strncmp(sha256_hex, params->sha256, 64) != 0) {
-        ESP_LOGE(TAG, "OTA: SHA-256 inválido");
-        ESP_LOGE(TAG, "  Esperado:  %s", params->sha256);
-        ESP_LOGE(TAG, "  Calculado: %s", sha256_hex);
-        esp_ota_abort(ota_handle);
-        goto ota_fail;
-    }
-    ESP_LOGI(TAG, "OTA: SHA-256 verificado OK");
-
-    err = esp_ota_end(ota_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "OTA end: %s", esp_err_to_name(err));
-        goto ota_fail;
-    }
-
-    err = esp_ota_set_boot_partition(update_partition);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "OTA set_boot_partition: %s", esp_err_to_name(err));
-        goto ota_fail;
-    }
-
-    ESP_LOGI(TAG, "OTA: actualización completa — reiniciando en 2s");
-    free(params);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    esp_restart();
-    return;
-
-ota_fail:
-    ESP_LOGE(TAG, "OTA: falló — el dispositivo sigue en la versión actual");
-    free(params);
-    ota_in_progress = false;
-    vTaskDelete(NULL);
-}
-
-static void handle_ota_message(const char *data, int data_len)
-{
-    if (ota_in_progress) {
-        ESP_LOGW(TAG, "OTA ya en progreso, ignorando mensaje");
-        return;
-    }
-
-    cJSON *json = cJSON_ParseWithLength(data, data_len);
-    if (!json) {
-        ESP_LOGE(TAG, "OTA: JSON inválido");
-        return;
-    }
-
-    cJSON *url_item     = cJSON_GetObjectItem(json, "url");
-    cJSON *sha256_item  = cJSON_GetObjectItem(json, "sha256");
-    cJSON *version_item = cJSON_GetObjectItem(json, "version");
-
-    if (!cJSON_IsString(url_item) || !cJSON_IsString(sha256_item) || !cJSON_IsString(version_item)) {
-        ESP_LOGE(TAG, "OTA: mensaje incompleto (falta url, sha256 o version)");
-        cJSON_Delete(json);
-        return;
-    }
-
-    ota_task_params_t *params = malloc(sizeof(ota_task_params_t));
-    if (!params) {
-        ESP_LOGE(TAG, "OTA: sin memoria");
-        cJSON_Delete(json);
-        return;
-    }
-
-    strncpy(params->url,     url_item->valuestring,     sizeof(params->url) - 1);
-    strncpy(params->sha256,  sha256_item->valuestring,  sizeof(params->sha256) - 1);
-    strncpy(params->version, version_item->valuestring, sizeof(params->version) - 1);
-    params->url[sizeof(params->url) - 1]         = '\0';
-    params->sha256[sizeof(params->sha256) - 1]   = '\0';
-    params->version[sizeof(params->version) - 1] = '\0';
-
-    cJSON_Delete(json);
-
-    ota_in_progress = true;
-    xTaskCreate(ota_task, "ota_task", 8192, params, 5, NULL);
-}
 
 // ============================================================
 // Comandos
@@ -376,40 +80,6 @@ static void handle_command(const char *data, int data_len)
 // MQTT
 // ============================================================
 
-// Versión de este binario — viene de version.txt (ver raíz del proyecto),
-// incrustada por ESP-IDF en el descriptor de la app en tiempo de build.
-// El server la extrae de los mismos bytes del .bin al publicarlo, así que
-// nunca puede desincronizarse de lo que el dispositivo realmente reporta.
-static const char *firmware_version(void)
-{
-    return esp_ota_get_app_description()->version;
-}
-
-static void publish_status(void)
-{
-    char payload[64];
-    snprintf(payload, sizeof(payload), "{\"firmware_version\":\"%s\"}", firmware_version());
-    // retain=1 — el server debe conocer la última versión reportada aunque
-    // se reinicie y se resuscriba después de que el dispositivo publicó esto.
-    esp_mqtt_client_publish(mqtt_client, topic_status, payload, 0, 1, 1);
-    ESP_LOGI(TAG, "Version reportada al servidor: %s", firmware_version());
-}
-
-// Si esta partición quedó pendiente de verificar tras un OTA y nunca se
-// confirma (WiFi/MQTT no llegan a conectar con el nuevo firmware), fuerza
-// un reinicio dentro del margen — al no estar confirmada, el bootloader
-// revierte automáticamente a la partición anterior conocida como válida.
-static void rollback_watchdog_task(void *pvParameters)
-{
-    vTaskDelay(pdMS_TO_TICKS(ROLLBACK_CONFIRM_TIMEOUT_MS));
-    if (pending_rollback_confirm) {
-        ESP_LOGE(TAG, "No se confirmo el nuevo firmware en %d ms - reiniciando para revertir (rollback)",
-            ROLLBACK_CONFIRM_TIMEOUT_MS);
-        esp_restart();
-    }
-    vTaskDelete(NULL);
-}
-
 static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t) data;
@@ -422,15 +92,8 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
             esp_mqtt_client_subscribe(mqtt_client, topic_profile,  1);
             ESP_LOGI(TAG, "Suscrito a: %s, %s, %s", topic_commands, topic_ota, topic_profile);
 
-            publish_status();
-
-            // Llegar hasta aqui prueba que WiFi + credenciales MQTT del
-            // firmware nuevo funcionan de punta a punta — seguro confirmar.
-            if (pending_rollback_confirm) {
-                esp_ota_mark_app_valid_cancel_rollback();
-                pending_rollback_confirm = false;
-                ESP_LOGI(TAG, "Firmware %s confirmado como valido - rollback cancelado", firmware_version());
-            }
+            totem_publish_status(mqtt_client, topic_status);
+            totem_rollback_confirm();
             break;
 
         case MQTT_EVENT_DISCONNECTED:
@@ -448,7 +111,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
                 handle_command(event->data, event->data_len);
             } else if (strcmp(topic, topic_ota) == 0) {
                 ESP_LOGI(TAG, "Mensaje OTA recibido");
-                handle_ota_message(event->data, event->data_len);
+                totem_ota_handle_message(event->data, event->data_len);
             } else if (strcmp(topic, topic_profile) == 0) {
                 ESP_LOGI(TAG, "Perfil recibido: %.*s", event->data_len, event->data);
             } else {
@@ -469,10 +132,10 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
 static void mqtt_init(void)
 {
     esp_mqtt_client_config_t cfg = {
-        .broker.address.uri                       = mqtt_uri,
-        .credentials.username                     = unit_id,
-        .credentials.authentication.password      = api_key,
-        .credentials.client_id                    = unit_id,
+        .broker.address.uri                  = config.mqtt_uri,
+        .credentials.username                = config.unit_id,
+        .credentials.authentication.password  = config.api_key,
+        .credentials.client_id                = config.unit_id,
     };
 
     mqtt_client = esp_mqtt_client_init(&cfg);
@@ -495,7 +158,7 @@ static void publish_readings_task(void *pvParameters)
     char payload[256];
 
     while (1) {
-        if (!ota_in_progress) {
+        if (!totem_ota_in_progress()) {
 
             // --- Modelo de temperatura ---
             if (pump_on) {
@@ -555,20 +218,20 @@ static void publish_readings_task(void *pvParameters)
 
 void app_main(void)
 {
-    const esp_partition_t *running = esp_ota_get_running_partition();
-    ESP_LOGI(TAG, "Arrancando desde partición: %s (firmware %s)", running->label, firmware_version());
-
-    esp_ota_img_states_t ota_state;
-    if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK
-        && ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
-        ESP_LOGW(TAG, "Particion pendiente de verificar tras OTA — confirmando al conectar a MQTT");
-        pending_rollback_confirm = true;
-        xTaskCreate(rollback_watchdog_task, "rollback_wd", 2048, NULL, 5, NULL);
-    }
+    totem_rollback_init();
 
     ESP_ERROR_CHECK(nvs_flash_init());
-    load_config_from_nvs();
-    wifi_init();
+    totem_config_load(&config);
+
+    snprintf(topic_readings, sizeof(topic_readings), "totem/%s/readings", config.unit_id);
+    snprintf(topic_commands, sizeof(topic_commands), "totem/%s/commands", config.unit_id);
+    snprintf(topic_alerts,   sizeof(topic_alerts),   "totem/%s/alerts",   config.unit_id);
+    snprintf(topic_events,   sizeof(topic_events),   "totem/%s/events",   config.unit_id);
+    snprintf(topic_ota,      sizeof(topic_ota),      "totem/%s/ota",      config.unit_id);
+    snprintf(topic_profile,  sizeof(topic_profile),  "totem/%s/profile",  config.unit_id);
+    snprintf(topic_status,   sizeof(topic_status),   "totem/%s/status",   config.unit_id);
+
+    totem_wifi_connect(&config);
     mqtt_init();
 
     vTaskDelay(pdMS_TO_TICKS(2000));

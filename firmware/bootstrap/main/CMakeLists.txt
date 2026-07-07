@@ -1,10 +1,6 @@
 idf_component_register(SRCS "bootstrap.c"
                     INCLUDE_DIRS "."
                     REQUIRES
-                        app_update
-                        esp_http_client
-                        esp_wifi
-                        json
-                        mbedtls
+                        totem_core
                         mqtt
                         nvs_flash)

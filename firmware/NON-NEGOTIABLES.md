@@ -6,10 +6,11 @@ correr en una unidad real y hablar con el server (`firmware/bootstrap`, `firmwar
 puntos, deja de ser compatible con el ciclo de vida OTA, con el panel de administración de
 firmware, o con el broker MQTT — no son detalles de estilo, son el contrato con el server.
 
-Referencia de implementación real: `firmware/simulator/main/simulator.c` (firmware con
-funcionalidad probada en hardware) y `firmware/bootstrap/main/bootstrap.c` (mínimo, sin
-sensores). Todo firmware nuevo parte de duplicar ese esqueleto — no de un componente
-compartido (ver nota al final).
+Implementación real: el esqueleto de WiFi/NVS/OTA/rollback vive en el componente compartido
+`firmware/components/totem_core` (ver nota al final). Todo firmware nuevo lo declara en su
+`REQUIRES` vía `EXTRA_COMPONENT_DIRS` — no lo duplica. `firmware/bootstrap/main/bootstrap.c` es
+la referencia más simple de cómo consumirlo (sin sensores); `firmware/genesis/main/genesis.c`
+muestra además cómo sumar un driver de sensor propio (`totem_dht11`) sin tocar el core.
 
 ---
 
@@ -214,11 +215,24 @@ Sí varía libremente entre proyectos: qué sensores/actuadores existen, el cont
 `readings`/`alerts`/`commands`, el intervalo de publicación, y cualquier lógica de decisión de
 riego o modelo de estimación (ver decisiones pendientes de ML en `docs/ecosistema/overview.md`).
 
-## 10. Nota sobre duplicación de código
+## 10. Componentes compartidos
 
-El código de WiFi/NVS/OTA está intencionalmente duplicado entre `bootstrap.c`, `simulator.c`, y
-cualquier proyecto nuevo — no extraído a un componente compartido (`firmware/components/...`)
-porque no había toolchain de ESP-IDF disponible para validar esa extracción en el momento en que
-se escribió `bootstrap`. Si en algún punto se agrega CI con el toolchain, migrar todos los
-proyectos a un componente común (ej. `totem_core`) es deseable — mientras tanto, cualquier cambio
-a esta lógica (ej. un fix de OTA) debe replicarse a mano en cada proyecto.
+WiFi/NVS/OTA/rollback/versión/status viven en `firmware/components/totem_core` — un solo
+componente, no varios independientes, porque en la práctica siempre viajan juntos (la
+confirmación de rollback ocurre dentro del callback `MQTT_EVENT_CONNECTED`, que también publica
+`status`). Cualquier fix a esta lógica (ej. un bug de OTA) se corrige una sola vez en
+`totem_core` y aplica a todos los proyectos que lo consumen.
+
+Los drivers de sensor/actuador sí son componentes independientes y opcionales — cada proyecto
+declara en su `REQUIRES` solo los que le aplican. Ejemplo: `firmware/components/totem_dht11`
+(sensor RQ-S003/DHT11), usado por `genesis` pero no por `bootstrap` ni `simulator`.
+
+Para que un proyecto use estos componentes, su `CMakeLists.txt` de raíz debe definir, antes de
+`include(project.cmake)`:
+
+```cmake
+set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
+```
+
+y su `main/CMakeLists.txt` debe listar `totem_core` (siempre) y los drivers que aplique (ej.
+`totem_dht11`) en `REQUIRES`.
