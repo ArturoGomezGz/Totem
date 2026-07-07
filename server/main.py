@@ -38,6 +38,16 @@ def _retry_pending_alerts() -> None:
         db.close()
 
 
+ORG_STATUS_STARTUP_DELAY_SECONDS = 15
+
+
+async def _delayed_org_status() -> None:
+    # Da tiempo a que el cliente MQTT reconecte y las unidades publiquen
+    # una lectura fresca antes de calcular quién está activo.
+    await asyncio.sleep(ORG_STATUS_STARTUP_DELAY_SECONDS)
+    notify_org_status()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     ws_module.set_event_loop(asyncio.get_event_loop())
@@ -45,7 +55,7 @@ async def lifespan(app: FastAPI):
     start_polling()
     _retry_pending_alerts()
     notify_startup()
-    notify_org_status()
+    asyncio.create_task(_delayed_org_status())
     yield
     stop_polling()
     mqtt_client.disconnect()
