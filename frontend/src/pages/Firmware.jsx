@@ -329,9 +329,10 @@ export default function Firmware() {
             const targetingCount = units.length - pendingUnits.length
             const isDeployOpen = activeAction?.releaseId === release.id && activeAction.type === 'deploy'
             const isDeleteOpen = activeAction?.releaseId === release.id && activeAction.type === 'delete'
+            const isActionOpen = isDeployOpen || isDeleteOpen
             return (
-              <Card key={release.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+              <Card key={release.id} style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--space-4)', rowGap: 'var(--space-4)' }}>
+                <div style={{ flex: '1 1 220px', minWidth: 200 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
                     <p style={{
                       fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
@@ -353,7 +354,10 @@ export default function Firmware() {
                     Publicado {new Date(release.released_at).toLocaleString('es')}
                   </p>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-end',
+                  ...(isActionOpen ? { flexBasis: '100%' } : {}),
+                }}>
                   {!isDeleteOpen && (
                     <DeployRow
                       release={release} units={units}
