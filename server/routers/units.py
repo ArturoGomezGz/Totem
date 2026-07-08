@@ -27,7 +27,7 @@ class ReadingsSnapshot(BaseModel):
 
 
 class UnitStateOut(BaseModel):
-    pump_on: bool
+    pump_state: Literal["off", "supplying", "on"] = "off"
     readings: Optional[ReadingsSnapshot] = None
     last_seen: Optional[str] = None
 

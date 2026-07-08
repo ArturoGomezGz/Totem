@@ -134,9 +134,26 @@ export const mockApi = {
   // ---------- Commands ----------
   sendCommand: async (unit_id, type) => {
     await delay(200)
-    const pump_on = type === 'pump_on'
-    setLiveState(unit_id, { pump_on, last_seen: new Date().toISOString() })
-    store.events.unshift({ id: uid(), unit_id, timestamp: new Date().toISOString(), type, trigger: 'manual' })
+    if (type === 'pump_off') {
+      setLiveState(unit_id, { pump_state: 'off', last_seen: new Date().toISOString() })
+      store.events.unshift({ id: uid(), unit_id, timestamp: new Date().toISOString(), type, trigger: 'manual' })
+      return { detail: 'Comando enviado' }
+    }
+
+    // Simula el flotador del módulo de suministro (ver genesis.c): la mitad
+    // de las veces el nivel ya alcanza y la bomba arranca directo, la otra
+    // mitad pasa primero por "abasteciendo" hasta que sube el flotador.
+    const needsSupply = Math.random() < 0.5
+    if (needsSupply) {
+      setLiveState(unit_id, { pump_state: 'supplying', last_seen: new Date().toISOString() })
+      setTimeout(() => {
+        setLiveState(unit_id, { pump_state: 'on', last_seen: new Date().toISOString() })
+        store.events.unshift({ id: uid(), unit_id, timestamp: new Date().toISOString(), type: 'pump_on', trigger: 'manual' })
+      }, 3000)
+    } else {
+      setLiveState(unit_id, { pump_state: 'on', last_seen: new Date().toISOString() })
+      store.events.unshift({ id: uid(), unit_id, timestamp: new Date().toISOString(), type: 'pump_on', trigger: 'manual' })
+    }
     return { detail: 'Comando enviado' }
   },
 

@@ -12,19 +12,65 @@ con el server.
 | | `simulator` (1.0.x) | `genesis` (1.1.x) |
 |---|---|---|
 | Temperatura/humedad | Modelo simulado (`esp_random`) | Lectura real de un sensor **RQ-S003** (módulo REXQualis basado en DHT11) |
-| Luz/CO2 | Simulados | No implementados — no hay sensor físico para esto todavía |
-| Bomba | Solo logueada (`pump_on`/`pump_off`) | LED físico en un GPIO real, controlado por los mismos comandos MQTT |
+| Luz | Simulada | Lectura real de un **fotoresistor (LDR)** — valor crudo de ADC (0-4095), solo para testing |
+| CO2 | Simulado | No implementado — no hay sensor físico para esto todavía |
+| Bomba | Solo logueada (`pump_on`/`pump_off`) | LED físico en un GPIO real; el comando ya no la enciende directo, ver [Módulo de suministro simulado](#módulo-de-suministro-simulado-flotador--válvula-nc) |
 | Alertas | Sobre temperatura simulada | Mismo umbral (`TEMP_ALERT`/`TEMP_SAFE`), ahora sobre temperatura real |
+| Flotador / válvula NC | No existen | Simulados con un botón (flotador) y un LED (válvula NC) |
 
-Los topics MQTT, el payload de `readings` (menos `light`/`co2`), el flujo de comandos, OTA,
+Los topics MQTT, el payload de `readings` (menos `co2`), el flujo de comandos, OTA,
 rollback y reporte de versión son exactamente los mismos que en `simulator`.
+
+### Fotoresistor — nota sobre el `light` crudo
+
+El campo `light` publica directamente la lectura cruda del ADC (0-4095 @ 12 bits) del
+fotoresistor, sin ningún umbral ni conversión — solo sirve para verificar en el dashboard
+que el valor efectivamente cambia con la luz ambiente. **No** es una medición calibrada de
+lux ni de PAR (radiación fotosintéticamente activa): el LDR del kit RexQualis no tiene la
+respuesta espectral ni la calibración necesarias para eso. Cuando el sistema de decisión de
+riego necesite luz real como entrada del modelo de Pn, este sensor debe reemplazarse por uno
+digital calibrado (ej. BH1750, TSL2561) o, idealmente, un sensor PAR — ver conversación de
+diseño en `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
+
+### Módulo de suministro simulado (flotador + válvula NC)
+
+Simula, con un botón y un LED, la verificación que describe
+`docs/capa1/totem-principal/sistema-riego/modulo-suministro.md` antes de regar — sin importar
+si el riego fue disparado manualmente o por el sistema de decisión automático:
+
+1. Llega un comando `pump_on` (manual o automático) → se marca "riego solicitado", pero la
+   bomba **no** se enciende todavía.
+2. Una tarea (`irrigation_supply_task`) pregunta continuamente: ¿el flotador está arriba
+   (solución suficiente)?
+   - **Sí** → la bomba enciende directo.
+   - **No** → se abre la válvula NC (LED encendido) y se queda esperando; en cuanto el
+     flotador sube, se cierra la válvula y recién ahí enciende la bomba.
+3. Un comando `pump_off` cancela el riego solicitado y apaga bomba y válvula de inmediato,
+   en cualquier punto del proceso.
+
+El firmware reporta 3 estados en `topic_events` (`{"action": "..."}`), uno por cada
+transición real del actuador — no al recibir el comando:
+
+| `action` | Cuándo se publica |
+|---|---|
+| `supplying` | Se abrió la válvula NC porque el flotador estaba abajo al pedirse riego |
+| `pump_on`   | La bomba arrancó (flotador ya arriba, o justo subió mientras abastecía) |
+| `pump_off`  | Todo apagado — llegó `pump_off`, o nunca se pidió riego |
+
+Esto le permite al dashboard mostrar "Abasteciendo" mientras espera el flotador en vez de
+interpretar el silencio tras el comando como que el dispositivo no respondió (ver
+`server/state.py` / `frontend/src/pages/UnitDetail.jsx`, campo `pump_state`).
 
 ## Hardware
 
 - **Placa:** ESP32-C6 SuperMini (USB-C, LED RGB WS2812 en GPIO8, botón BOOT en GPIO9 — ambos
   integrados, no expuestos en los headers).
 - **Sensor:** RQ-S003 (módulo DHT11 con pull-up integrado), 3 pines: VCC, GND, DATA.
-- **Actuador:** LED simple + resistencia limitadora, simulando la bomba.
+- **Sensor de luz:** fotoresistor (LDR) del kit RexQualis, como divisor de voltaje con una
+  resistencia fija.
+- **Actuador (bomba):** LED simple + resistencia limitadora.
+- **Actuador (válvula NC):** LED simple + resistencia limitadora.
+- **Flotador:** botón momentáneo a GND, simulando el flotador de nivel (presionado = arriba).
 
 ### Mapeo de pines confirmado sobre esta placa
 
@@ -39,11 +85,46 @@ Asignación usada en este firmware (ver `main/genesis.c`):
 |---|---|
 | RQ-S003 DATA | **GPIO4** |
 | LED (bomba) | **GPIO5** |
+| LDR (nodo del divisor) | **GPIO1** (ADC1_CHANNEL_1) |
+| LED (válvula NC) | **GPIO2** |
+| Botón (flotador) | **GPIO3** |
 | RQ-S003 VCC | 3V3 |
 | RQ-S003 GND | GND |
 | LED cátodo (vía resistencia) | GND |
+| Botón (otra pata) | GND |
 
 GPIO8 y GPIO9 quedan reservados (RGB y BOOT integrados) — no usar para periféricos externos.
+
+### Conexión del flotador (botón) y la válvula NC (LED)
+
+El botón usa el pull-up interno del GPIO3, así que solo hace falta una pata a GPIO3 y la
+otra a GND — presionado = flotador **arriba** (solución suficiente), soltado = flotador
+**abajo** (solución insuficiente). El LED de la válvula NC se cablea igual que el de la
+bomba: GPIO2 → resistencia limitadora → ánodo del LED → cátodo a GND.
+
+### Conexión del fotoresistor (LDR)
+
+El LDR no genera voltaje por sí mismo — hay que armarlo como **divisor de voltaje** con una
+resistencia fija (10kΩ es un buen valor de arranque; ajustar si el rango de lectura queda
+muy pegado a 0 o a 4095):
+
+```
+3V3 ── LDR ── (nodo, a GPIO1) ── resistencia 10kΩ ── GND
+```
+
+1. Una pata del LDR a **3V3**.
+2. La otra pata del LDR al **nodo común**.
+3. Una pata de la resistencia de 10kΩ al **mismo nodo común**.
+4. La otra pata de la resistencia a **GND**.
+5. El nodo común (unión LDR + resistencia) a **GPIO1**.
+
+Con esta orientación, **más luz → menos resistencia del LDR → más voltaje en el nodo →
+lectura ADC más alta**. El firmware publica esa lectura cruda tal cual en `light` (0–4095,
+sin umbral ni conversión), así que en el dashboard debería subir al iluminar el sensor y
+bajar al taparlo. Si en cambio `light` se queda siempre pegado a 0 o a 4095, lo más probable
+es que la orientación del divisor esté invertida (LDR y resistencia intercambiados) o que el
+nodo común no esté realmente conectado a GPIO1 — revisar el cableado contra el diagrama de
+arriba.
 
 > Nota histórica: se probó moverlo temporalmente a GPIO18 sospechando de GPIO4
 > como pin de strapping, pero el DHT11 falló igual en ambos pines — el pin

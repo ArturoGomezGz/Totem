@@ -65,7 +65,7 @@ export default function UnitDetail() {
     setCmdLoading(true)
     setCmdError(null)
     try {
-      await api.sendCommand(unitId, unit.pump_on ? 'pump_off' : 'pump_on')
+      await api.sendCommand(unitId, pumpState === 'off' ? 'pump_on' : 'pump_off')
       setPumpPending(true)
       pendingTimer.current = setTimeout(() => setPumpPending(false), CMD_LOCK_MS)
     } catch {
@@ -79,9 +79,14 @@ export default function UnitDetail() {
     ? profiles.find(p => p.id === unitMeta.active_profile_id)
     : null
 
-  const on        = unit?.pump_on ?? false
+  const pumpState = unit?.pump_state ?? 'off'
   const r         = unit?.readings
-  const pumpPhase = cmdLoading ? 'sending' : pumpPending ? 'pending' : on ? 'on' : 'off'
+  // 'supplying' viene confirmado por el dispositivo (válvula abierta esperando
+  // el flotador) — una vez que llega, ya no depende del timer local pumpPending.
+  const pumpPhase = pumpState === 'supplying' ? 'supplying'
+    : cmdLoading ? 'sending'
+    : pumpPending ? 'pending'
+    : pumpState === 'on' ? 'on' : 'off'
   const lastSeenStr = unit?.last_seen
     ? new Date(unit.last_seen).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
     : null
@@ -130,7 +135,7 @@ export default function UnitDetail() {
       {tab === 'live' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
           <PumpCard
-            on={on} phase={pumpPhase}
+            on={pumpState === 'on'} phase={pumpPhase}
             offline={isOffline && !!unit}
             lastSeen={lastSeenStr}
             onToggle={togglePump}
@@ -179,22 +184,29 @@ export default function UnitDetail() {
 }
 
 function PumpCard({ on, phase, offline, lastSeen, onToggle }) {
-  const isBlocked   = phase === 'sending' || phase === 'pending'
-  const accentColor = offline ? 'var(--ink-300)' : on ? 'var(--green-500)' : 'var(--blue-700)'
-  const statusLabel = offline ? 'SIN SEÑAL' : on ? 'BOMBA ENCENDIDA' : 'BOMBA APAGADA'
-  const btnLabel    = phase === 'sending' ? 'Enviando...' : phase === 'pending' ? 'Confirmando...' : on ? 'Apagar bomba' : 'Regar ahora'
+  const supplying   = phase === 'supplying'
+  const isBlocked   = phase === 'sending' || phase === 'pending' || supplying
+  const accentColor = offline ? 'var(--ink-300)' : supplying ? 'var(--status-warning)' : on ? 'var(--green-500)' : 'var(--blue-700)'
+  const statusLabel = offline ? 'SIN SEÑAL' : supplying ? 'ABASTECIENDO TANQUE' : on ? 'BOMBA ENCENDIDA' : 'BOMBA APAGADA'
+  const statusColor = offline ? 'var(--text-muted)' : supplying ? 'var(--status-warning)' : on ? 'var(--green-600)' : 'var(--text-muted)'
+  const dotColor    = offline ? 'var(--ink-300)' : supplying ? 'var(--status-warning)' : on ? 'var(--green-500)' : 'var(--ink-300)'
+  const dotGlow     = supplying ? 'var(--status-warning-fill)' : 'var(--green-100)'
+  const btnLabel    = phase === 'sending' ? 'Enviando...'
+    : phase === 'pending' ? 'Confirmando...'
+    : supplying ? 'Esperando nivel de tanque...'
+    : on ? 'Apagar bomba' : 'Regar ahora'
 
   return (
     <Card accent={accentColor}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
         <span style={{
           width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-          background: offline ? 'var(--ink-300)' : on ? 'var(--green-500)' : 'var(--ink-300)',
-          boxShadow: !offline && on ? '0 0 0 3px var(--green-100)' : 'none',
+          background: dotColor,
+          boxShadow: !offline && (on || supplying) ? `0 0 0 3px ${dotGlow}` : 'none',
         }} />
         <span style={{
           fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
-          fontSize: 'var(--text-sm)', color: offline ? 'var(--text-muted)' : on ? 'var(--green-600)' : 'var(--text-muted)',
+          fontSize: 'var(--text-sm)', color: statusColor,
           letterSpacing: 'var(--tracking-caps)', textTransform: 'uppercase',
         }}>
           {statusLabel}
@@ -209,6 +221,16 @@ function PumpCard({ on, phase, offline, lastSeen, onToggle }) {
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
           El dispositivo no envía datos. El control no está disponible.
         </p>
+      ) : supplying ? (
+        <>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
+            El nivel de solución es insuficiente — la válvula está abierta llenando el tanque.
+            La bomba arrancará sola en cuanto suba el flotador.
+          </p>
+          <Button fullWidth size="lg" variant="outline" disabled>
+            {btnLabel}
+          </Button>
+        </>
       ) : (
         <Button fullWidth size="lg" variant={on ? 'outline' : 'teal'} disabled={isBlocked} onClick={onToggle}
           style={on ? { borderColor: 'var(--status-danger)', color: 'var(--status-danger)' } : {}}>

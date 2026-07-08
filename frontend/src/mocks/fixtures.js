@@ -141,12 +141,12 @@ export function seedReadings() {
 export function seedLiveState() {
   return {
     'unit-totem-1': {
-      pump_on: false,
+      pump_state: 'off',
       readings: { temperature: 22.1, humidity: 61.4, light: 310, co2: 470, timestamp: new Date().toISOString() },
       last_seen: new Date().toISOString(),
     },
     'unit-tank-1': {
-      pump_on: false,
+      pump_state: 'off',
       readings: { temperature: 24.0, humidity: 58.0, light: null, co2: null, timestamp: minutesAgo(2) },
       last_seen: minutesAgo(2),
     },

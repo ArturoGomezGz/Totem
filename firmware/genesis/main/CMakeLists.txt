@@ -4,6 +4,7 @@ idf_component_register(SRCS "genesis.c"
                         totem_core
                         totem_dht11
                         driver
+                        esp_adc
                         json
                         mqtt
                         nvs_flash)
