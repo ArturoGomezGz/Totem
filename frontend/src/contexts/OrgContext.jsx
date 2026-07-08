@@ -35,8 +35,12 @@ export function OrgProvider({ children }) {
     switchOrg(org.id)
   }
 
+  const updateOrgName = (id, name) => {
+    setOrgs(prev => prev.map(o => o.id === id ? { ...o, name } : o))
+  }
+
   return (
-    <OrgContext.Provider value={{ orgs, activeOrg, activeOrgId, switchOrg, addOrg, loading }}>
+    <OrgContext.Provider value={{ orgs, activeOrg, activeOrgId, switchOrg, addOrg, updateOrgName, loading }}>
       {children}
     </OrgContext.Provider>
   )

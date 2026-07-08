@@ -5,11 +5,10 @@ import { useOrg } from '../contexts/OrgContext'
 
 export default function Organizations() {
   const navigate      = useNavigate()
-  const { orgs, switchOrg } = useOrg()
+  const { orgs } = useOrg()
 
   const handleEnter = (org) => {
-    switchOrg(org.id)
-    navigate('/units')
+    navigate(`/organizations/${org.id}`)
   }
 
   return (
@@ -58,17 +57,7 @@ export default function Organizations() {
               </p>
               <Badge tone="neutral">{org.role}</Badge>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-              {org.role === 'admin' && (
-                <Button
-                  variant="outline" size="sm"
-                  onClick={e => { e.stopPropagation(); navigate(`/organizations/${org.id}/members`) }}
-                >
-                  Miembros
-                </Button>
-              )}
-              <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1 }}>›</span>
-            </div>
+            <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, flexShrink: 0 }}>›</span>
           </Card>
         ))}
       </div>

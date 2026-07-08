@@ -11,7 +11,7 @@ import Firmware from './pages/Firmware'
 import SettingsPage from './pages/SettingsPage'
 import Organizations from './pages/Organizations'
 import NewOrganizationPage from './pages/NewOrganizationPage'
-import OrganizationMembers from './pages/OrganizationMembers'
+import OrganizationSettings from './pages/OrganizationSettings'
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -32,7 +32,7 @@ export default function App() {
           <Route path="/settings"                 element={<SettingsPage />} />
           <Route path="/organizations"            element={<Organizations />} />
           <Route path="/organizations/new"        element={<NewOrganizationPage />} />
-          <Route path="/organizations/:organizationId/members" element={<OrganizationMembers />} />
+          <Route path="/organizations/:organizationId" element={<OrganizationSettings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/units" replace />} />

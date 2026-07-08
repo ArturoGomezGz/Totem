@@ -37,6 +37,13 @@ export const mockApi = {
     store.organizations.push(org)
     return org
   },
+  updateOrganization: async (organization_id, name) => {
+    await delay()
+    const org = store.organizations.find(o => o.id === organization_id)
+    if (!org) return notFound('Organización no encontrada')
+    org.name = name
+    return org
+  },
 
   // ---------- Members ----------
   getMembers: async (organization_id) => {

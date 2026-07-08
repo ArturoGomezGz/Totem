@@ -149,6 +149,50 @@ def list_organizations(
     ]
 
 
+@router.patch(
+    "/organizations/{organization_id}",
+    summary="Renombrar una organización",
+    description="""
+**¿Qué hace?**
+Actualiza el nombre de la organización.
+
+**¿Para qué?**
+Permite corregir o actualizar el nombre de la organización sin tener que
+recrearla.
+
+**¿Dónde se usa?**
+Panel de configuración de la organización — campo "Nombre" editable.
+""",
+    response_model=OrganizationOut,
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "Solo los administradores pueden renombrar la organización"},
+    },
+)
+def update_organization(
+    organization_id: str,
+    body: OrganizationIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = require_org_admin(organization_id, current_user, db)
+
+    org = db.query(Organization).filter(Organization.id == organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organización no encontrada")
+
+    org.name = body.name
+    db.commit()
+    db.refresh(org)
+
+    return OrganizationOut(
+        id=str(org.id),
+        name=org.name,
+        role=membership.role,
+        created_at=org.created_at,
+    )
+
+
 @router.get(
     "/organizations/{organization_id}/members",
     summary="Listar miembros de una organización",
