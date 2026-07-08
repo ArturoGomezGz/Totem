@@ -70,7 +70,8 @@ interpretar el silencio tras el comando como que el dispositivo no respondió (v
   resistencia fija.
 - **Actuador (bomba):** LED simple + resistencia limitadora.
 - **Actuador (válvula NC):** LED simple + resistencia limitadora.
-- **Flotador:** botón momentáneo a GND, simulando el flotador de nivel (presionado = arriba).
+- **Flotador:** interruptor mecánico de nivel real. A diferencia de un botón normal, **cierra
+  el circuito (conduce) cuando está ABAJO** y lo **abre (corta) cuando está ARRIBA**.
 
 ### Mapeo de pines confirmado sobre esta placa
 
@@ -87,20 +88,29 @@ Asignación usada en este firmware (ver `main/genesis.c`):
 | LED (bomba) | **GPIO5** |
 | LDR (nodo del divisor) | **GPIO1** (ADC1_CHANNEL_1) |
 | LED (válvula NC) | **GPIO2** |
-| Botón (flotador) | **GPIO3** |
+| Flotador (una pata) | **GPIO3** |
 | RQ-S003 VCC | 3V3 |
 | RQ-S003 GND | GND |
 | LED cátodo (vía resistencia) | GND |
-| Botón (otra pata) | GND |
+| Flotador (otra pata) | GND |
 
 GPIO8 y GPIO9 quedan reservados (RGB y BOOT integrados) — no usar para periféricos externos.
 
-### Conexión del flotador (botón) y la válvula NC (LED)
+### Conexión del flotador y la válvula NC (LED)
 
-El botón usa el pull-up interno del GPIO3, así que solo hace falta una pata a GPIO3 y la
-otra a GND — presionado = flotador **arriba** (solución suficiente), soltado = flotador
-**abajo** (solución insuficiente). El LED de la válvula NC se cablea igual que el de la
-bomba: GPIO2 → resistencia limitadora → ánodo del LED → cátodo a GND.
+El flotador usa el pull-up interno del GPIO3, así que solo hace falta una pata a GPIO3 y la
+otra a GND. **Importante:** este flotador es un interruptor que cierra el circuito (conduce)
+cuando está ABAJO y lo abre (corta) cuando está ARRIBA — es decir, al revés que un botón
+común. Con el pull-up interno eso se traduce en:
+
+- Flotador **abajo** (solución insuficiente) → circuito cerrado a GND → GPIO3 en **LOW**.
+- Flotador **arriba** (solución suficiente) → circuito abierto → GPIO3 en **HIGH** (pull-up).
+
+`float_switch_up()` en `main/genesis.c` ya lee esta polaridad correctamente. Si al conectar
+el flotador real el comportamiento sale invertido, verificar que no se haya cableado un
+interruptor de la polaridad contraria (algunos modelos abren abajo/cierran arriba). El LED
+de la válvula NC se cablea igual que el de la bomba: GPIO2 → resistencia limitadora → ánodo
+del LED → cátodo a GND.
 
 ### Conexión del fotoresistor (LDR)
 

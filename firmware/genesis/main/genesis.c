@@ -52,9 +52,11 @@
 // regar hay que verificar que el flotador esté arriba (solución suficiente).
 // Si no, se abre la válvula NC hasta que el flotador suba.
 //   - VALVE_LED_GPIO: LED que simula la válvula NC (encendido = abierta).
-//   - FLOAT_SWITCH_GPIO: botón que simula el flotador. Pull-up interno,
-//     activo en bajo: presionado (a GND) = flotador ARRIBA = solución
-//     suficiente; soltado (HIGH) = flotador ABAJO = solución insuficiente.
+//   - FLOAT_SWITCH_GPIO: flotador real (interruptor mecánico), con pull-up
+//     interno. A diferencia de un botón normal, este flotador **cierra el
+//     circuito (deja pasar corriente) cuando está ABAJO** y lo **abre
+//     (corta la corriente) cuando está ARRIBA** — es decir, LOW = flotador
+//     abajo (solución insuficiente), HIGH = flotador arriba (suficiente).
 #define VALVE_LED_GPIO      GPIO_NUM_2
 #define FLOAT_SWITCH_GPIO   GPIO_NUM_3
 
@@ -111,10 +113,11 @@ static void supply_module_init(void)
     gpio_config(&float_cfg);
 }
 
-// true = flotador arriba (solución suficiente). Activo en bajo (pull-up).
+// true = flotador arriba (solución suficiente). El flotador corta el
+// circuito al subir, así que con el pull-up interno arriba = HIGH.
 static bool float_switch_up(void)
 {
-    return gpio_get_level(FLOAT_SWITCH_GPIO) == 0;
+    return gpio_get_level(FLOAT_SWITCH_GPIO) == 1;
 }
 
 static void pump_set(bool on)
