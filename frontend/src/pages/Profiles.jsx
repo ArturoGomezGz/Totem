@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { Button, Card, Alert, Badge } from '../design-system'
+import { Button, Card, Alert } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useOrg } from '../contexts/OrgContext'
 
@@ -11,7 +11,6 @@ export default function Profiles() {
 
   const [profiles, setProfiles] = useState([])
   const [error, setError]       = useState(null)
-  const [deleting, setDeleting] = useState(null)
 
   const load = async () => {
     if (!activeOrgId) return
@@ -24,18 +23,6 @@ export default function Profiles() {
   }
 
   useEffect(() => { load() }, [activeOrgId]) // eslint-disable-line
-
-  const handleDelete = async (profile) => {
-    setDeleting(profile.id)
-    try {
-      await api.deleteProfile(profile.id)
-      setProfiles(ps => ps.filter(p => p.id !== profile.id))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setDeleting(null)
-    }
-  }
 
   if (!activeOrgId) {
     return (
@@ -99,7 +86,12 @@ export default function Profiles() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         {profiles.map(profile => (
-          <Card key={profile.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Card
+            key={profile.id}
+            interactive
+            onClick={() => navigate(`/profiles/${profile.id}`)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+          >
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{
                 fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
@@ -115,18 +107,7 @@ export default function Profiles() {
                 {profile.species ? `${profile.species} · ` : ''}{profile.irrigation_method}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
-              <Button size="sm" variant="outline" onClick={() => navigate(`/profiles/${profile.id}/edit`)}>
-                Editar
-              </Button>
-              <Button
-                size="sm" variant="danger"
-                disabled={deleting === profile.id}
-                onClick={() => handleDelete(profile)}
-              >
-                {deleting === profile.id ? '...' : 'Eliminar'}
-              </Button>
-            </div>
+            <span style={{ color: 'var(--text-muted)', fontSize: 20, lineHeight: 1, flexShrink: 0 }}>›</span>
           </Card>
         ))}
       </div>

@@ -6,6 +6,7 @@ import NewUnitPage from './pages/NewUnitPage'
 import UnitDetail from './pages/UnitDetail'
 import Profiles from './pages/Profiles'
 import ProfileFormPage from './pages/ProfileFormPage'
+import ProfileDetail from './pages/ProfileDetail'
 import Firmware from './pages/Firmware'
 import SettingsPage from './pages/SettingsPage'
 import Organizations from './pages/Organizations'
@@ -26,7 +27,7 @@ export default function App() {
           <Route path="/units/:unitId"            element={<UnitDetail />} />
           <Route path="/profiles"                 element={<Profiles />} />
           <Route path="/profiles/new"             element={<ProfileFormPage />} />
-          <Route path="/profiles/:profileId/edit" element={<ProfileFormPage />} />
+          <Route path="/profiles/:profileId"      element={<ProfileDetail />} />
           <Route path="/firmware"                 element={<Firmware />} />
           <Route path="/settings"                 element={<SettingsPage />} />
           <Route path="/organizations"            element={<Organizations />} />
