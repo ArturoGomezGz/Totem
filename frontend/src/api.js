@@ -6,6 +6,10 @@ function getToken() {
   return localStorage.getItem('access_token')
 }
 
+function getRefreshToken() {
+  return localStorage.getItem('refresh_token')
+}
+
 export function saveTokens(access_token, refresh_token) {
   localStorage.setItem('access_token', access_token)
   if (refresh_token) localStorage.setItem('refresh_token', refresh_token)
@@ -16,7 +20,34 @@ export function clearTokens() {
   localStorage.removeItem('refresh_token')
 }
 
-async function request(method, path, body) {
+let refreshPromise = null
+
+function refreshAccessToken() {
+  const refresh_token = getRefreshToken()
+  if (!refresh_token) return Promise.resolve(false)
+
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.access_token) return false
+        saveTokens(data.access_token, data.refresh_token)
+        return true
+      })
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+
+  return refreshPromise
+}
+
+async function request(method, path, body, _retry = false) {
   const headers = { 'Content-Type': 'application/json' }
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -28,6 +59,9 @@ async function request(method, path, body) {
   })
 
   if (res.status === 401 && token) {
+    if (!_retry && (await refreshAccessToken())) {
+      return request(method, path, body, true)
+    }
     clearTokens()
     window.location.href = '/login'
     return
@@ -92,7 +126,7 @@ const realApi = {
   assignProfile: (unit_id, profile_id)      => request('PUT',    `/units/${unit_id}/profile`, { profile_id }),
 
   getFirmwareReleases: (organization_id) => request('GET', `/firmware?organization_id=${organization_id}`),
-  uploadFirmware: async ({ organization_id, description, file }) => {
+  uploadFirmware: async ({ organization_id, description, file }, _retry = false) => {
     const form = new FormData()
     form.append('organization_id', organization_id)
     if (description) form.append('description', description)
@@ -104,6 +138,9 @@ const realApi = {
 
     const res = await fetch(`${BASE}/firmware`, { method: 'POST', headers, body: form })
     if (res.status === 401 && token) {
+      if (!_retry && (await refreshAccessToken())) {
+        return realApi.uploadFirmware({ organization_id, description, file }, true)
+      }
       clearTokens()
       window.location.href = '/login'
       return
