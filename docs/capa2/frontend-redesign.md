@@ -103,10 +103,10 @@ Vista "En vivo" por defecto        Vista configurada (usuario 2)
 │ Temperatura  │ │  Humedad     │  │       Temperatura        │
 │   23.4 °C    │ │   65 %       │  │          23.4 °C         │
 └──────────────┘ └──────────────┘  └──────────────────────────┘
-┌──────────────┐ ┌──────────────┐  ┌──────────────┐
-│   Luz PAR    │ │    CO₂       │  │   Luz PAR    │
-│   412 µmol   │ │  820 ppm     │  │   412 µmol   │
-└──────────────┘ └──────────────┘  └──────────────┘
+┌──────────────┐                   ┌──────────────┐
+│   Luz PAR    │                   │   Luz PAR    │
+│   412 µmol   │                   │   412 µmol   │
+└──────────────┘                   └──────────────┘
 ┌─────────────────────────────────┐
 │   Control de Bomba              │
 │   ⬤ BOMBA ENCENDIDA  [APAGAR] │
@@ -120,7 +120,6 @@ Vista "En vivo" por defecto        Vista configurada (usuario 2)
 | `temperature` | StatCard | Temperatura | °C | WS readings |
 | `humidity` | StatCard | Humedad relativa | % | WS readings |
 | `light` | StatCard | Luz PAR | µmol/m²/s | WS readings |
-| `co2` | StatCard | CO₂ | ppm | WS readings |
 | `pump_control` | Control | Control de bomba | — | WS + commands |
 | `active_profile` | Config | Perfil activo | — | REST |
 | `connection_status` | Status | Estado de conexión | — | WS |
@@ -146,8 +145,8 @@ El modo edición **no** debe interferir con los datos en tiempo real — el WS s
 ```jsonc
 // Estructura guardada
 {
-  "visible": ["temperature", "humidity", "light", "co2", "pump_control"],
-  "order": ["temperature", "humidity", "pump_control", "light", "co2"],
+  "visible": ["temperature", "humidity", "light", "pump_control"],
+  "order": ["temperature", "humidity", "pump_control", "light"],
   "hiddenAvailable": ["active_profile", "connection_status"]
 }
 ```
@@ -177,7 +176,6 @@ Los widgets StatCard usan el componente `StatCard` del design system con accents
 - Temperatura → `--teal-500`
 - Humedad → `--blue-700`
 - Luz PAR → `--lime-500`
-- CO₂ → `--ink-500`
 
 ---
 
@@ -220,7 +218,6 @@ frontend/src/
 │   │   ├── TemperatureWidget.jsx
 │   │   ├── HumidityWidget.jsx
 │   │   ├── LightWidget.jsx
-│   │   ├── Co2Widget.jsx
 │   │   ├── PumpControlWidget.jsx
 │   │   ├── ActiveProfileWidget.jsx
 │   │   └── ConnectionStatusWidget.jsx
@@ -254,7 +251,7 @@ Derivadas del design system CIBNOR y del principio de bajo costo/replicabilidad:
 1. **Sin emoji.** Ni en UI ni en código. El sistema es institucional y científico.
 2. **Tema claro.** Fondo blanco / `--blue-050`. El dark mode no es prioritario — si se añade, será posterior.
 3. **Texto en español institucional.** Sentence case en headings. Eyebrows en UPPERCASE con `--tracking-caps`. Sin camelCase en labels visibles al usuario.
-4. **Valores numéricos en IBM Plex Mono.** Temperatura, humedad, CO₂, PAR, timestamps.
+4. **Valores numéricos en IBM Plex Mono.** Temperatura, humedad, PAR, timestamps.
 5. **Feedback visual de estado.** Todo botón que dispara una acción async muestra estado loading / error / éxito. Los errores usan el componente `Alert` del DS, no párrafos con color rojo inline.
 6. **Offline/sin señal explícito.** Si la unidad está offline, los widgets muestran `—` y un badge `SIN SEÑAL` en naranja/warning, nunca datos stale sin indicación.
 7. **Acciones destructivas requieren confirmación.** Apagar la bomba manualmente es una acción con consecuencias — considerar un modal de confirmación o al menos un estado de doble-tap.

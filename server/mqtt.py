@@ -90,7 +90,6 @@ class MQTTClient:
                 temperature=payload.get("temperature"),
                 humidity=payload.get("humidity"),
                 light=payload.get("light"),
-                co2=payload.get("co2"),
             ))
             unit = db.query(Unit).filter(Unit.id == unit_id_str).first()
             if unit:

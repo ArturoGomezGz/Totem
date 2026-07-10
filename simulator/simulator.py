@@ -119,7 +119,6 @@ class TotemSimulator:
                 f"T={readings['temperature']}C  "
                 f"RH={readings['humidity']}%  "
                 f"Li={readings['light']} PAR  "
-                f"CO2={readings['co2']}ppm  "
                 f"bomba={'ON' if self._pump_on else 'OFF'}"
             )
             time.sleep(PUBLISH_INTERVAL)

@@ -152,7 +152,6 @@ static void publish_readings_task(void *pvParameters)
     float temperature = TEMP_BASE;
     float humidity    = 65.0f;
     float light       = 300.0f;
-    float co2         = 500.0f;
     bool  alert_sent  = false;
 
     char payload[256];
@@ -173,15 +172,14 @@ static void publish_readings_task(void *pvParameters)
             float t_pub  = temperature + ((float)(esp_random() % 20) - 10) * 0.02f;
             float h_pub  = humidity    + ((float)(esp_random() % 10) -  5) * 0.1f;
             float l_pub  = light       + ((float)(esp_random() % 20) - 10) * 1.0f;
-            float c_pub  = co2         + ((float)(esp_random() % 10) -  5) * 1.0f;
 
             // Publicar lectura
             snprintf(payload, sizeof(payload),
-                "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%.1f,\"co2\":%.1f}",
-                t_pub, h_pub, l_pub, c_pub);
+                "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%.1f}",
+                t_pub, h_pub, l_pub);
             esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
-            ESP_LOGI(TAG, "temp=%.1f hum=%.1f co2=%.1f | bomba=%s | alerta=%s",
-                t_pub, h_pub, c_pub,
+            ESP_LOGI(TAG, "temp=%.1f hum=%.1f | bomba=%s | alerta=%s",
+                t_pub, h_pub,
                 pump_on    ? "ON"   : "OFF",
                 alert_sent ? "ACTIVA" : "ok");
 

@@ -67,8 +67,6 @@ class CropProfile(Base):
     humidity_max: Mapped[Optional[float]] = mapped_column(Float)
     light_min: Mapped[Optional[float]] = mapped_column(Float)
     light_max: Mapped[Optional[float]] = mapped_column(Float)
-    co2_min: Mapped[Optional[float]] = mapped_column(Float)
-    co2_max: Mapped[Optional[float]] = mapped_column(Float)
     irrigation_method: Mapped[str] = mapped_column(String, nullable=False)
     irrigation_params: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
@@ -90,7 +88,6 @@ class Reading(Base):
     temperature: Mapped[Optional[float]] = mapped_column(Float)
     humidity: Mapped[Optional[float]] = mapped_column(Float)
     light: Mapped[Optional[float]] = mapped_column(Float)
-    co2: Mapped[Optional[float]] = mapped_column(Float)
 
 
 class DeviceEvent(Base):

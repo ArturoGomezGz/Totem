@@ -1,6 +1,6 @@
 # Investigación — Alternativas para estimación del estado hídrico/fotosintético y niveles escalables de firmware
 
-**Estado: documento de investigación exploratoria, no de decisión.** Ninguna conclusión aquí reemplaza las decisiones pendientes en `modulo-decision.md` (OI-IRR-01 a OI-IRR-05). El objetivo es ampliar el panorama de opciones — desde lo más simple hasta lo más sofisticado que existe hoy en la literatura y en el mercado — para discutirlo y luego cerrar decisiones con criterio informado.
+**Estado: investigación que ya informó una decisión tomada.** El 10 jul 2026 se decidió adoptar el **Nivel F1** de este documento (VPD calculado por fórmula cerrada + modulador simple de luz, sin ML) como la decisión definitiva del Módulo de Decisión de Riego, descartando CO₂ del conjunto de sensores. Ver la decisión completa, su justificación y sus citas en `modulo-decision.md`. Este documento se conserva como respaldo de investigación — el resto del contenido (niveles F2–F5, costos de sensores, ruta de experimentación futura) sigue siendo válido como referencia para posibles mejoras posteriores, no como trabajo pendiente bloqueante.
 
 ---
 

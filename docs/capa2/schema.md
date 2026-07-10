@@ -2,7 +2,7 @@
 
 TimescaleDB (extensión de PostgreSQL). Stack completo en `docs/capa2/stack.md`.
 
-**Estado:** cerrado · 24 jun 2026 · revisado 25 jun 2026 (normalización y constraints) · revisado 2 jul 2026 (gestión de firmware por organización)
+**Estado:** cerrado · 24 jun 2026 · revisado 25 jun 2026 (normalización y constraints) · revisado 2 jul 2026 (gestión de firmware por organización) · revisado 9 jul 2026 (relación tanque de suministro ↔ totems, tabla `supply_tank_configs`, columnas `ph`/`ec`/`tank_level` en `readings`)
 
 ---
 
@@ -65,6 +65,22 @@ Configuración específica de unidades tipo `totem`. Relación 1:1 con `units`.
 |---|---|---|
 | `unit_id` | UUID PK FK → units | |
 | `active_profile_id` | UUID FK → crop_profiles | Nullable — sin perfil asignado aún |
+| `supply_tank_id` | UUID FK → units | Nullable — tanque padre (`type = 'supply_tank'`) del que se abastece este Totem por gravedad. `NULL` = llenado manual (MVP) o sin tanque padre asignado. Relación 1 tanque → N totems; no es many-to-many porque físicamente un Totem se abastece de un solo tanque a la vez (una manguera). Puramente informativa para el dashboard — no afecta el comportamiento físico del Totem, que decide su propio llenado vía su flotador y válvula NC sin depender de que el server conozca esta relación |
+
+### `supply_tank_configs`
+
+Configuración específica de unidades tipo `supply_tank`. Relación 1:1 con `units` — mismo patrón que `totem_configs`.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `unit_id` | UUID PK FK → units | |
+| `capacity_liters` | FLOAT | Nullable — capacidad total del tanque. Permite estimar volumen aproximado a partir de los 3 flotadores y calcular autonomía (días restantes) combinando con histórico de consumo |
+| `ph_min` / `ph_max` | FLOAT | Nullable — rango aceptable de pH. Fuera de rango dispara alerta |
+| `ec_min` / `ec_max` | FLOAT | Nullable — rango aceptable de EC (mS/cm). Fuera de rango dispara alerta |
+
+**Decisión — 9 jul 2026.** Los rangos de `ph_min/max` y `ec_min/max` son **explícitos y manuales por tanque, no derivados de los perfiles de cultivo de los totems que abastece**. Razón: un tanque tiene una única composición física de solución; si abastece totems con cultivos de necesidades muy distintas (ej. hoja verde ~0.8–1.2 mS/cm vs. frutales ~2.0–3.5 mS/cm — rangos que no se solapan), no existe un único rango "correcto" derivable automáticamente — la composición real del tanque es la que determina qué cultivos puede alimentar, no al revés. Ver investigación y fuentes en `capa1/tanque-de-suministro/sistema-tanque-suministro.md`.
+
+Un módulo de cálculo/sugerencia automática de rango (a partir de los perfiles de cultivo conectados) queda como feature planificada que vive **sobre** este esquema, sin modificarlo — ver `docs/planned-features.md` § "Cálculo automático de rango EC/pH sugerido".
 
 ### `readings` *(hypertable TimescaleDB)*
 
@@ -79,16 +95,20 @@ Todas las columnas de sensores son nullable. `NULL` no significa fallo de lectur
 | `temperature` | FLOAT | °C — nullable |
 | `humidity` | FLOAT | % RH — nullable |
 | `light` | FLOAT | PAR / PPFD (µmol/m²/s) — nullable |
-| `co2` | FLOAT | ppm — nullable |
+| `ph` | FLOAT | Nullable — reportado tanto por `totem` (FR-43) como por `supply_tank` |
+| `ec` | FLOAT | mS/cm — nullable — reportado tanto por `totem` (FR-43) como por `supply_tank` |
+| `tank_level` | FLOAT | Nullable — solo `supply_tank` (nivel discreto derivado de los 3 flotadores, ver `capa1/tanque-de-suministro/modulo-flotadores.md`). El Totem no reporta nivel — su flotador único es control local, no telemetría |
 
 Clave primaria compuesta: `(unit_id, timestamp)`. Particionado automático por tiempo via TimescaleDB.
 
-**Extensión para el tanque de suministro:** cuando el tanque esté definido, sus sensores (pH, EC, temperatura del agua, nivel) se agregan como columnas adicionales a esta misma tabla. Las filas del totem tendrán esas columnas en `NULL` y viceversa. Esta decisión está respaldada por dos razones:
+**Decisión — 9 jul 2026 (revisa la nota original que suponía `ph`/`ec` exclusivos del tanque padre).** `ph` y `ec` los reporta **tanto el Totem como el tanque padre** — el Totem mide la solución que realmente recibe la raíz (punto de entrega real), que puede diferir del tanque padre por evaporación u otros factores; ver FR-43 y `capa1/totem-principal/sistema-decision/modulo-lectura-sensores.md`. `tank_level` sigue siendo exclusivo del tanque padre, porque el nivel del Totem no se reporta (control local vía un solo flotador, ver `capa1/totem-principal/sistema-riego/modulo-suministro.md`).
+
+Estas columnas siguen el mismo patrón nullable que el resto: `NULL` significa "esta unidad no tiene ese sensor instalado", no fallo de lectura. Está respaldado por dos razones:
 
 1. **Costo de almacenamiento negligible.** La compresión columnar de TimescaleDB almacena columnas de `NULL` con costo casi cero. A cualquier escala razonable del proyecto, las columnas vacías no tienen impacto en el tamaño de la DB.
-2. **Queries simples.** El campo `units.type` (`totem` / `supply_tank`) distingue el tipo de dispositivo. Filtrar por tipo de unidad es suficiente para separar lecturas ambientales de lecturas de calidad de agua — no se necesitan joins adicionales ni tablas separadas.
+2. **Queries simples.** El campo `units.type` (`totem` / `supply_tank`) distingue el tipo de dispositivo cuando hace falta filtrar, pero no es estrictamente necesario para columnas que ambos tipos pueden usar (`ph`, `ec`) — a diferencia de `tank_level`, que sí es exclusivo de `supply_tank`.
 
-Las columnas del tanque **no se agregan hasta tener definidos los sensores exactos**. El `ALTER TABLE ADD COLUMN` en TimescaleDB no requiere migración compleja ni downtime.
+El `ALTER TABLE ADD COLUMN` en TimescaleDB no requiere migración compleja ni downtime — estas columnas se agregan cuando se implemente el sensor correspondiente, no antes.
 
 ### `device_events`
 
@@ -120,9 +140,7 @@ Los rangos ambientales son nullable — `NULL` significa que esa variable no apl
 | `humidity_max` | FLOAT | % RH — nullable |
 | `light_min` | FLOAT | PAR — nullable |
 | `light_max` | FLOAT | PAR — nullable |
-| `co2_min` | FLOAT | ppm — nullable |
-| `co2_max` | FLOAT | ppm — nullable |
-| `irrigation_method` | VARCHAR NOT NULL | ej. `pn_threshold`, `fixed_timer`, `lookup_table` |
+| `irrigation_method` | VARCHAR NOT NULL | ej. `vpd_threshold`, `fixed_timer`, `lookup_table` |
 | `irrigation_params` | JSONB NOT NULL | Parámetros libres según el método activo |
 | `created_at` | TIMESTAMPTZ NOT NULL | |
 | `updated_at` | TIMESTAMPTZ NOT NULL | Se actualiza en cada PUT /api/v1/profiles/{id} |
@@ -174,7 +192,7 @@ Metadatos de versiones de firmware publicadas para OTA. El binario `.bin` vive e
 | `id` | UUID PK | |
 | `organization_id` | UUID FK → organizations NOT NULL | |
 | `version` | VARCHAR NOT NULL | Versión semántica — ej. `1.2.0`. Única dentro de la organización, no globalmente (`UNIQUE (organization_id, version)`) |
-| `description` | TEXT | Nullable — notas libres del admin sobre el release (ej. "fix de lectura de CO₂", "cambio de intervalo de ciclo"). Ayuda al usuario a distinguir versiones en el dashboard |
+| `description` | TEXT | Nullable — notas libres del admin sobre el release (ej. "fix de lectura de humedad", "cambio de intervalo de ciclo"). Ayuda al usuario a distinguir versiones en el dashboard |
 | `binary_path` | VARCHAR NOT NULL | Path relativo al binario en el filesystem del server — ej. `data/firmware/{organization_id}/totem-v1.2.0.bin` |
 | `sha256` | VARCHAR NOT NULL | Hash SHA-256 del binario para verificación de integridad en el ESP32 |
 | `uploaded_by` | UUID FK → users | Admin que subió el compilado |
@@ -190,6 +208,8 @@ users
   │     └── organizations
   │           ├── units (genérico: totem, supply_tank, etc.)
   │           │     ├── totem_configs  (1:1, solo type = totem)
+  │           │     │     └── supply_tank_id → units (type = supply_tank, N totems → 1 tanque)
+  │           │     ├── supply_tank_configs  (1:1, solo type = supply_tank)
   │           │     ├── readings       (1 unidad → N lecturas)
   │           │     ├── device_events  (1 unidad → N eventos de actuadores)
   │           │     ├── commands       (1 unidad → N comandos, issued_by → users)
@@ -205,19 +225,20 @@ users
 
 ## Notas de diseño
 
-### Nivel de tanque — no se persiste en `readings`
+### Nivel de tanque — distinto tratamiento en Totem vs. tanque padre
 
-El nivel del tanque se gestiona únicamente a través de alertas y control de la válvula. No existe columna `tank_level` en la tabla `readings`.
+**Decisión — 9 jul 2026 (revisa la nota original de dos flotadores, ver `ecosistema/overview.md`).**
 
-**Dos flotadores digitales** montados en el tanque a ~30% y ~90% de capacidad:
+**Totem (tanque hijo):** el nivel **no se persiste en `readings`** — se gestiona únicamente a través de alertas y control local de la válvula, con **un solo flotador** (no dos):
 
-| flotador_alto (90%) | flotador_bajo (30%) | Estado | Acción del sistema |
-|---|---|---|---|
-| Sumergido | Sumergido | Lleno (> 90%) | Válvula cerrada, LED verde |
-| En aire | Sumergido | Normal (30–90%) | Sin acción |
-| En aire | En aire | Bajo (< 30%) | Válvula abierta, LED rojo, alerta Telegram |
+| Flotador | Estado | Acción del sistema |
+|---|---|---|
+| Sumergido | Nivel suficiente | Válvula cerrada, LED verde |
+| En aire | Nivel bajo | Válvula abierta, LED rojo, alerta Telegram |
 
-Las lecturas de los flotadores no viajan en el payload de `/readings` — el ESP32 actúa localmente de forma inmediata y genera una alerta via `/alerts` solo cuando el flotador del 30% se activa.
+La lectura del flotador no viaja en el payload de `/readings` — el ESP32 actúa localmente de forma inmediata y genera una alerta via `/alerts` solo cuando el flotador queda en el aire. Ver `capa1/totem-principal/sistema-riego/modulo-suministro.md`.
+
+**Tanque padre (abastecimiento):** el nivel **sí se persiste en `readings.tank_level`** como serie de tiempo, con **tres flotadores** para mayor granularidad (4 escalones: vacío/bajo/medio/lleno) — aquí sí interesa el histórico para graficar consumo y estimar autonomía. Ver `capa1/tanque-de-suministro/modulo-flotadores.md`.
 
 ### Gestión de firmware por organización
 
@@ -254,9 +275,11 @@ Revisión exhaustiva realizada el 25 jun 2026. El esquema cumple 1NF, 2NF y 3NF.
 
 **Regla de negocio que la aplicación (FastAPI) debe hacer cumplir:** antes de asignar `active_profile_id`, verificar que `crop_profiles.organization_id = units.organization_id` para esa unidad. Este check debe ejecutarse en el endpoint `PUT /api/v1/units/{unit_id}/profile`.
 
-Análogamente, `totem_configs` solo debe crearse para unidades con `type = 'totem'`. Tampoco expresable con FK — la aplicación lo garantiza.
+Análogamente, `totem_configs` solo debe crearse para unidades con `type = 'totem'`, y `supply_tank_configs` solo para unidades con `type = 'supply_tank'`. Tampoco expresable con FK — la aplicación lo garantiza.
 
 El mismo patrón aplica a `units.target_firmware_release_id → firmware_releases`: la aplicación debe verificar que `firmware_releases.organization_id = units.organization_id` antes de asignar un release como objetivo de una unidad. Este check debe ejecutarse en el endpoint que aplica firmware a una unidad o a toda la organización (ver `capa2/api-contract.md`).
+
+El mismo patrón aplica también a `totem_configs.supply_tank_id → units`: la aplicación debe verificar (1) que la unidad referenciada tenga `type = 'supply_tank'` y (2) que pertenezca a la misma `organization_id` que el Totem, antes de asignarla. Ninguna de las dos reglas es expresable con CHECK/FK simple en PostgreSQL.
 
 ### Constraints añadidos en el SQL (ausentes en el diseño original)
 
@@ -295,6 +318,8 @@ El historial de auditoría debe permanecer intacto. Si se requiere anonimizar un
 | `units → organizations` | RESTRICT | No borrar una org que todavía tiene unidades activas |
 | `totem_configs → units` | CASCADE | La config es parte de la unidad — muere con ella |
 | `totem_configs → crop_profiles` | SET NULL | Si el perfil se borra, la unidad queda sin perfil (nullable) |
+| `totem_configs.supply_tank_id → units` | SET NULL | Si el tanque padre se borra (o se revoca), el Totem queda sin tanque asignado (nullable) — no bloquea el borrado del tanque |
+| `supply_tank_configs → units` | CASCADE | La config es parte de la unidad — muere con ella (mismo criterio que `totem_configs`) |
 | `crop_profiles → organizations` | RESTRICT | No borrar una org que todavía tiene perfiles |
 | `readings → units` | CASCADE | Las lecturas no tienen valor sin su unidad |
 | `device_events → units` | CASCADE | Ídem |
@@ -315,6 +340,7 @@ El historial de auditoría debe permanecer intacto. Si se requiere anonimizar un
 | `idx_units_organization_id` | `units` | Listar unidades de una org |
 | `idx_crop_profiles_organization_id` | `crop_profiles` | Listar perfiles de una org |
 | `idx_totem_configs_active_profile_id` | `totem_configs` | Encontrar unidades que usan un perfil |
+| `idx_totem_configs_supply_tank_id` | `totem_configs` | Encontrar los totems que abastece un tanque padre dado |
 | `idx_readings_unit_timestamp` | `readings` | Histórico y últimas lecturas por unidad |
 | `idx_device_events_unit_timestamp` | `device_events` | Historial de eventos por unidad |
 | `idx_commands_unit_created_at` | `commands` | Historial de comandos por unidad |

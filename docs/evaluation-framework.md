@@ -61,6 +61,6 @@ Evalúa el resultado final: estado de las plantas y rendimiento de cosecha. Vali
 Evalúa la calidad técnica del sistema inteligente. Tiene menos peso en la etapa actual ya que la capa inteligente está en desarrollo, pero se vuelve cada vez más central en versiones futuras.
 
 - **Latencia sensor-a-acción** — ms desde la lectura del sensor hasta la actuación de la bomba; crítica en aeroponía donde las raíces expuestas pueden sufrir daño en minutos
-- **Precisión de predicción del modelo** — R² del modelo ML al predecir Pn; los mejores en la literatura (SVR, BPNN) alcanzan R² > 0.99 en condiciones controladas
+- **Precisión del cálculo de riego** — desviación entre el VPD objetivo del perfil y el VPD real mantenido en la cámara aeropónica
 - **Tiempo de actividad del sistema** — % del tiempo que el sistema opera sin fallas; una falla de riego aeropónico puede causar daño irreversible en raíces en pocas horas
-- **Cobertura de sensores por unidad** — número y variedad de variables monitoreadas (T, RH, Li, CO₂, EC, pH, nivel, caudal); mayor cobertura provee datos más ricos al modelo ML
+- **Cobertura de sensores por unidad** — número y variedad de variables monitoreadas (T, RH, Li, EC, pH, nivel, caudal); mayor cobertura habilita mejores alertas y análisis histórico

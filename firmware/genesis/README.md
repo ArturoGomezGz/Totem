@@ -12,13 +12,14 @@ con el server.
 | | `simulator` (1.0.x) | `genesis` (1.1.x) |
 |---|---|---|
 | Temperatura/humedad | Modelo simulado (`esp_random`) | Lectura real de un sensor **RQ-S003** (módulo REXQualis basado en DHT11) |
-| Luz | Simulada | Lectura real de un **fotoresistor (LDR)** — valor crudo de ADC (0-4095), solo para testing |
-| CO2 | Simulado | No implementado — no hay sensor físico para esto todavía |
+| Luz | Simulada | Lectura real de un **fotoresistor (LDR)** — valor crudo de ADC (0-4095), solo para testing. No es confiable todavía; pendiente de reemplazo por un sensor más preciso (ver decisión del 10 jul 2026 en `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`) |
 | Bomba | Solo logueada (`pump_on`/`pump_off`) | LED físico en un GPIO real; el comando ya no la enciende directo, ver [Módulo de suministro simulado](#módulo-de-suministro-simulado-flotador--válvula-nc) |
 | Alertas | Sobre temperatura simulada | Mismo umbral (`TEMP_ALERT`/`TEMP_SAFE`), ahora sobre temperatura real |
 | Flotador / válvula NC | No existen | Simulados con un botón (flotador) y un LED (válvula NC) |
 
-Los topics MQTT, el payload de `readings` (menos `co2`), el flujo de comandos, OTA,
+**CO₂ fue evaluado y descartado del diseño (10 jul 2026)** — no es un sensor pendiente de implementar, ver justificación en `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`. El payload de `readings` ya no incluye `co2` en ninguna línea de firmware.
+
+Los topics MQTT, el payload de `readings`, el flujo de comandos, OTA,
 rollback y reporte de versión son exactamente los mismos que en `simulator`.
 
 ### Fotoresistor — nota sobre el `light` crudo

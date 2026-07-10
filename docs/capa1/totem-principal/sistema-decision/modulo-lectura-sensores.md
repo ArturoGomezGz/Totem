@@ -4,12 +4,17 @@ Responsabilidad: leer los sensores físicos y traducir sus valores crudos a unid
 
 ## Sensores
 
-| Variable | Símbolo | Unidad |
-|---|---|---|
-| Temperatura | T | °C |
-| Humedad relativa | RH | % |
-| Intensidad lumínica | Li | µmol/m²/s (PAR) |
-| CO₂ | CO₂ | ppm |
+| Variable | Símbolo | Unidad | Uso |
+|---|---|---|---|
+| Temperatura | T | °C | Cálculo de VPD → decisión de riego |
+| Humedad relativa | RH | % | Cálculo de VPD → decisión de riego |
+| Intensidad lumínica | Li | µmol/m²/s (PAR) | Modulador de duración del ciclo de riego (sin ML en el MVP) |
+| pH | pH | — | Calidad de la solución del propio tanque del Totem (FR-43) — **no** alimenta la decisión de riego, es monitoreo/alerta independiente |
+| Conductividad eléctrica | EC | mS/cm | Calidad de la solución del propio tanque del Totem (FR-43) — mismo estatus que pH |
+
+**Decisión — 10 jul 2026.** Se descarta el sensor de CO₂ del conjunto de sensores del Módulo de Decisión. El profesor colaborador señaló, por experiencia previa, la dificultad de sostener este tipo de sensor en campo (deriva, calibración frecuente); la literatura revisada confirma el problema (ver `modulo-decision.md`, sección "Por qué se excluye CO₂"). El riego pasa a decidirse por VPD (T + RH) con Li como modulador de duración — ver `modulo-decision.md`.
+
+**Decisión — 9 jul 2026.** Se agregan pH y EC como sensores del propio tanque del Totem, no solo del tanque padre (ver `docs/capa1/tanque-de-suministro/`). Miden la solución en el punto real de entrega a la raíz, que puede diferir del tanque padre por evaporación u otros factores — habilita corrección manual localizada por el usuario, y es la base para una futura mezcla dinámica entre tanques padre (idea capturada en `docs/planned-features.md`, no diseñada aún). Es puramente una adición de firmware + hardware, distribuible por OTA — no requiere cambios en la lógica de decisión de riego ni en el esquema de Capa 2 (columnas nullable ya previstas en `readings`, ver `capa2/schema.md`).
 
 ## Independencia
 

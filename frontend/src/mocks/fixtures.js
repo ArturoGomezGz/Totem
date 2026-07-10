@@ -9,13 +9,12 @@ export function genReadings(hours = 24, stepMin = 20) {
   const steps = Math.floor((hours * 60) / stepMin)
   const now = Date.now()
   const points = []
-  let temp = 21, hum = 62, co2 = 480
+  let temp = 21, hum = 62
 
   for (let i = steps; i >= 0; i--) {
     const ts = new Date(now - i * stepMin * 60_000)
     temp = Math.min(29, Math.max(18, temp + (Math.random() - 0.5) * 1.2))
     hum  = Math.min(85, Math.max(45, hum  + (Math.random() - 0.5) * 3))
-    co2  = Math.min(900, Math.max(380, co2 + (Math.random() - 0.5) * 15))
     const h = ts.getHours()
     const light = h >= 7 && h <= 19 ? 200 + Math.random() * 250 : Math.random() * 20
 
@@ -24,7 +23,6 @@ export function genReadings(hours = 24, stepMin = 20) {
       temperature: round1(temp),
       humidity: round1(hum),
       light: round1(light),
-      co2: Math.round(co2),
     })
   }
   return points.reverse() // más reciente primero, igual que el API real
@@ -90,17 +88,17 @@ export function seedProfiles() {
     {
       id: 'profile-lechuga', organization_id: 'org-demo', name: 'Lechuga mantecosa', species: 'Lactuca sativa',
       temp_min: 18, temp_max: 26, humidity_min: 55, humidity_max: 75,
-      light_min: 150, light_max: 400, co2_min: 400, co2_max: 800,
-      irrigation_method: 'pn_threshold',
-      irrigation_params: { threshold_pn: 8.5, cycle_duration_s: 30, min_interval_s: 900 },
+      light_min: 150, light_max: 400,
+      irrigation_method: 'vpd_threshold',
+      irrigation_params: { threshold_vpd_kpa: 0.85, cycle_duration_s: 30, min_interval_s: 900 },
       created_at: hoursAgo(24 * 10), updated_at: hoursAgo(24 * 3),
     },
     {
       id: 'profile-albahaca', organization_id: 'org-demo', name: 'Albahaca', species: 'Ocimum basilicum',
       temp_min: 20, temp_max: 30, humidity_min: 50, humidity_max: 70,
-      light_min: 200, light_max: 450, co2_min: 400, co2_max: 900,
-      irrigation_method: 'pn_threshold',
-      irrigation_params: { threshold_pn: 9.0, cycle_duration_s: 25, min_interval_s: 1200 },
+      light_min: 200, light_max: 450,
+      irrigation_method: 'vpd_threshold',
+      irrigation_params: { threshold_vpd_kpa: 0.95, cycle_duration_s: 25, min_interval_s: 1200 },
       created_at: hoursAgo(24 * 8), updated_at: hoursAgo(24 * 8),
     },
   ]
@@ -142,12 +140,12 @@ export function seedLiveState() {
   return {
     'unit-totem-1': {
       pump_state: 'off',
-      readings: { temperature: 22.1, humidity: 61.4, light: 310, co2: 470, timestamp: new Date().toISOString() },
+      readings: { temperature: 22.1, humidity: 61.4, light: 310, timestamp: new Date().toISOString() },
       last_seen: new Date().toISOString(),
     },
     'unit-tank-1': {
       pump_state: 'off',
-      readings: { temperature: 24.0, humidity: 58.0, light: null, co2: null, timestamp: minutesAgo(2) },
+      readings: { temperature: 24.0, humidity: 58.0, light: null, timestamp: minutesAgo(2) },
       last_seen: minutesAgo(2),
     },
     // unit-totem-2 deliberadamente sin entrada: simula un dispositivo recién

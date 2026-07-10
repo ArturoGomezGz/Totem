@@ -6,7 +6,6 @@ const SENSORS = [
   { key: 'temperature', label: 'Temperatura', unit: '°C',   color: 'var(--teal-500)',  hex: '#00A99D' },
   { key: 'humidity',    label: 'Humedad',      unit: '% RH', color: 'var(--blue-700)',  hex: '#0077AA' },
   { key: 'light',       label: 'Luz PAR',      unit: 'µmol', color: 'var(--lime-500)',  hex: '#8DC44A' },
-  { key: 'co2',         label: 'CO₂',          unit: 'ppm',  color: 'var(--ink-500)',   hex: '#5a6675' },
 ]
 
 function fmt(ts) {

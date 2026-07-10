@@ -26,8 +26,6 @@ class CropProfileOut(BaseModel):
     humidity_max: Optional[float] = None
     light_min: Optional[float] = None
     light_max: Optional[float] = None
-    co2_min: Optional[float] = None
-    co2_max: Optional[float] = None
     irrigation_method: str
     irrigation_params: dict
     created_at: datetime
@@ -46,8 +44,6 @@ class CropProfileIn(BaseModel):
     humidity_max: Optional[float] = None
     light_min: Optional[float] = None
     light_max: Optional[float] = None
-    co2_min: Optional[float] = None
-    co2_max: Optional[float] = None
     irrigation_method: str
     irrigation_params: dict
 
@@ -113,8 +109,6 @@ def list_profiles(
             humidity_max=p.humidity_max,
             light_min=p.light_min,
             light_max=p.light_max,
-            co2_min=p.co2_min,
-            co2_max=p.co2_max,
             irrigation_method=p.irrigation_method,
             irrigation_params=p.irrigation_params,
             created_at=p.created_at,
@@ -165,8 +159,6 @@ def create_profile(
         humidity_max=body.humidity_max,
         light_min=body.light_min,
         light_max=body.light_max,
-        co2_min=body.co2_min,
-        co2_max=body.co2_max,
         irrigation_method=body.irrigation_method,
         irrigation_params=body.irrigation_params,
         created_at=now,
@@ -187,8 +179,6 @@ def create_profile(
         humidity_max=profile.humidity_max,
         light_min=profile.light_min,
         light_max=profile.light_max,
-        co2_min=profile.co2_min,
-        co2_max=profile.co2_max,
         irrigation_method=profile.irrigation_method,
         irrigation_params=profile.irrigation_params,
         created_at=profile.created_at,
@@ -240,8 +230,6 @@ def update_profile(
     profile.humidity_max = body.humidity_max
     profile.light_min = body.light_min
     profile.light_max = body.light_max
-    profile.co2_min = body.co2_min
-    profile.co2_max = body.co2_max
     profile.irrigation_method = body.irrigation_method
     profile.irrigation_params = body.irrigation_params
     profile.updated_at = datetime.now(timezone.utc)
@@ -260,8 +248,6 @@ def update_profile(
         humidity_max=profile.humidity_max,
         light_min=profile.light_min,
         light_max=profile.light_max,
-        co2_min=profile.co2_min,
-        co2_max=profile.co2_max,
         irrigation_method=profile.irrigation_method,
         irrigation_params=profile.irrigation_params,
         created_at=profile.created_at,

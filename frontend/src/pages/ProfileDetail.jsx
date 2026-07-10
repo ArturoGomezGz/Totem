@@ -183,7 +183,6 @@ export default function ProfileDetail() {
               <InfoRow label="Temperatura" value={formatRange(profile.temp_min, profile.temp_max, '°C')} />
               <InfoRow label="Humedad" value={formatRange(profile.humidity_min, profile.humidity_max, '%')} />
               <InfoRow label="Luz" value={formatRange(profile.light_min, profile.light_max, 'PAR')} />
-              <InfoRow label="CO₂" value={formatRange(profile.co2_min, profile.co2_max, 'ppm')} />
             </Card>
 
             <Card>

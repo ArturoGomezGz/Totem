@@ -11,7 +11,7 @@
 
 Totem es un sistema de riego aeropónico autónomo con dos capas. La base de datos es exclusiva de Capa 2 (server) y cumple tres roles simultáneos:
 
-1. **Registro histórico de series de tiempo:** almacena las lecturas continuas de sensores (T, RH, Li, CO₂) que llegan de cada ESP32 cada 1–5 minutos. Es el dato operacional de mayor volumen.
+1. **Registro histórico de series de tiempo:** almacena las lecturas continuas de sensores (T, RH, Li) que llegan de cada ESP32 cada 1–5 minutos. Es el dato operacional de mayor volumen.
 
 2. **Fuente de verdad de configuración:** almacena perfiles de cultivo, credenciales de dispositivos y asignaciones que el ESP32 consume (los cachea en flash). La DB es el punto de alta y revocación de cualquier unidad del sistema.
 
@@ -227,7 +227,7 @@ Consulta más pesada — puede retornar miles de filas si el rango es amplio. Re
 - `SELECT * FROM readings WHERE unit_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC`
 - Índice en `(unit_id, timestamp)` — ya cubierto por la clave primaria compuesta de la hypertable
 
-El dashboard muestra gráficas de T y RH en histórico (FR-27). Li y CO₂ solo en estado actual (MVP). Paginación pendiente de definir (ver pendientes en `api-contract.md`).
+El dashboard muestra gráficas de T y RH en histórico (FR-27). Li solo en estado actual (MVP). Paginación pendiente de definir (ver pendientes en `api-contract.md`).
 
 ### 4.3 Historial de eventos de riego
 
@@ -337,7 +337,7 @@ El campo `api_key` tiene `UNIQUE NOT NULL`, lo que implica un índice único. Pa
 
 El documento `capa1/tanque-de-suministro/sistema-conectividad/sistema-conectividad.md` menciona como pendiente si los sensores de calidad de agua (pH, EC, temperatura) van en el MVP del tanque de suministro. Si se incluyen, necesitarían columnas en `readings` o una tabla separada.
 
-**Impacto potencial:** si pH, EC y temperatura del tanque se agregan a `readings`, la tabla ancha crece. Actualmente `readings` solo tiene columnas para el Totem Principal (T, RH, Li, CO₂). Las columnas del tanque serían siempre `NULL` para unidades tipo `totem` y viceversa.
+**Impacto potencial:** si pH, EC y temperatura del tanque se agregan a `readings`, la tabla ancha crece. Actualmente `readings` solo tiene columnas para el Totem Principal (T, RH, Li). Las columnas del tanque serían siempre `NULL` para unidades tipo `totem` y viceversa.
 
 **Opciones a evaluar:**
 - Columnas adicionales en `readings` (`ph`, `ec`, `water_temp`) — nullable, consistente con el diseño actual

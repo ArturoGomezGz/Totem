@@ -23,11 +23,11 @@ Cada unidad Totem tiene exactamente un ESP32. Los componentes de este grupo vive
 
 | Componente | Descripción |
 |---|---|
-| **Sensores ambientales** | Temperatura (T), Humedad relativa (RH), Intensidad lumínica (Li / PAR), CO₂ (ppm). Alimentan el Módulo de Decisión de Riego. |
+| **Sensores ambientales** | Temperatura (T), Humedad relativa (RH), Intensidad lumínica (Li / PAR). Alimentan el Módulo de Decisión de Riego. CO₂ fue evaluado y descartado del diseño (10 jul 2026) — ver `sistema-decision/modulo-decision.md`. |
 | **Flotadores de nivel** | Dos flotadores digitales: flotador bajo (~30%) y flotador alto (~90%). El ESP32 los lee directamente. No se persisten en DB — controlan la válvula y generan alertas. |
 | **ESP32** | Microcontrolador central de la unidad. Orquesta el ciclo de operación completo |
-| **Módulo de Decisión de Riego** | Subcomponente del ESP32. Estima Pn (tasa de fotosíntesis) a partir de T, RH, Li y CO₂ usando un modelo ML embebido (`.tflite`, inferencia en dispositivo), y decide si activar la bomba y por cuánto tiempo |
-| **Perfil de Cultivo (caché flash)** | Copia local del perfil de cultivo activo, almacenada en flash del ESP32. Contiene umbral de Pn, rangos ambientales ideales y parámetros de duración de riego |
+| **Módulo de Decisión de Riego** | Subcomponente del ESP32. Calcula VPD (Déficit de Presión de Vapor) a partir de T y RH con fórmula cerrada — sin modelo ML — y usa Li como modulador simple de la duración del ciclo, y decide si activar la bomba y por cuánto tiempo |
+| **Perfil de Cultivo (caché flash)** | Copia local del perfil de cultivo activo, almacenada en flash del ESP32. Contiene umbral de VPD, rangos ambientales ideales y parámetros de duración de riego |
 | **Buffer offline (flash)** | Cola local en flash. Almacena lecturas y eventos cuando no hay conexión WiFi, para reenvío ordenado al reconectar |
 | **Bomba de riego** | Actuador. El ESP32 la enciende/apaga según la decisión del Módulo de Decisión de Riego o un comando de override |
 | **Válvula solenoide NC** | Actuador en la entrada de agua del tanque. Normalmente cerrada — requiere corriente para abrirse. Se abre cuando el flotador del 30% está en aire; se cierra cuando el del 90% se activa. Agnóstica a la fuente de agua. |
@@ -66,10 +66,10 @@ Todos los componentes de este grupo corren en el mismo host (Raspberry Pi, VPS o
 ### F1 — Ciclo de operación autónomo (Capa 1, local, siempre activo)
 
 ```
-Sensores ambientales ──[T, RH, Li, CO₂]──► ESP32
-ESP32 ──[T, RH, Li, CO₂]──► Módulo de Decisión de Riego
+Sensores ambientales ──[T, RH, Li]──► ESP32
+ESP32 ──[T, RH, Li]──► Módulo de Decisión de Riego
 Módulo de Decisión de Riego ──[lee]──► Perfil de Cultivo (caché flash)
-Módulo de Decisión de Riego ──[Pn < umbral → ON + duración]──► Bomba de riego
+Módulo de Decisión de Riego ──[VPD ≥ umbral → ON + duración]──► Bomba de riego
 ESP32 ──[evento ON/OFF + timestamp + duración]──► Buffer offline (flash)
 ```
 
@@ -231,6 +231,5 @@ Las siguientes decisiones están abiertas y pueden modificar componentes o flujo
 
 | Ítem | Impacto en arquitectura |
 |---|---|
-| Algoritmo ML para estimación de Pn (SVR, BPNN, ANN, otro) | La inferencia corre en el ESP32 como modelo `.tflite`. La selección del algoritmo afecta el entrenamiento en `ml/` y el tamaño del modelo exportado, pero no cambia la topología del diagrama. |
-| Función Pn → duración del ciclo de riego | Interna al Módulo de Decisión de Riego; no cambia la topología del diagrama |
+| Parámetros exactos de `f(VPD)` y `g(Li)` | Resuelto en principio (10 jul 2026): VPD por fórmula cerrada, sin modelo ML; `ml/` deja de ser necesario para el modelo base. Interna al Módulo de Decisión de Riego; no cambia la topología del diagrama. |
 | Buffer/reintento del ESP32 (tamaño, política de descarte) | Interna a la Capa 1; no cambia la topología |

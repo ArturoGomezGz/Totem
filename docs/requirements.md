@@ -15,6 +15,7 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 | FR — Frontend (dashboard web) | FR-22 – FR-35 |
 | FR — Bot de Telegram | FR-36 – FR-38 |
 | FR — Válvula de Entrada y Nivel de Tanque | FR-39 – FR-42 |
+| FR — Sensores de Calidad de Agua (Totem) | FR-43 |
 | NFR | NFR-01 – NFR-20 |
 
 **v1.0 MVP — estado: en desarrollo**
@@ -82,7 +83,7 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 
 **Monitoreo en tiempo real**
 
-- FR-22: El dashboard debe mostrar el estado actual de cada unidad Totem: valores de sensores más recientes (T, RH, Li, CO₂), estado de la bomba, nivel de tanque
+- FR-22: El dashboard debe mostrar el estado actual de cada unidad Totem: valores de sensores más recientes (T, RH, Li), estado de la bomba, nivel de tanque
 - FR-23: El dashboard debe indicar si el sistema está operando en modo autónomo (el Módulo de Decisión de Riego está activo) o en override manual
 - FR-24: El dashboard debe actualizarse automáticamente sin recargar la página. Implementación: polling desde el navegador cada 30–60 segundos. Latencia máxima aceptable: menos de 1 minuto.
 
@@ -90,7 +91,7 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 
 - FR-25: El dashboard debe permitir ver el histórico de lecturas de sensores en gráficas de series de tiempo, con selección de rango de fechas
 - FR-26: El dashboard debe permitir ver el historial de eventos de riego (cuándo se activó/apagó la bomba y duración del ciclo) cruzado con los valores de sensores en ese momento
-- FR-27: El MVP debe mostrar gráficas históricas de T, RH y eventos de riego. Li y CO₂ se muestran en estado actual pero sin gráfica histórica en el MVP. 🔴 *Por definir: rango de tiempo por defecto de las gráficas*
+- FR-27: El MVP debe mostrar gráficas históricas de T, RH y eventos de riego. Li se muestra en estado actual pero sin gráfica histórica en el MVP. 🔴 *Por definir: rango de tiempo por defecto de las gráficas*
 
 **Control manual**
 
@@ -123,17 +124,29 @@ Requerimientos funcionales (FR) y no funcionales (NFR) del sistema Totem v1.0 MV
 
 ### FR — Válvula de Entrada y Nivel de Tanque · FR-39 a FR-42
 
-> Válvula solenoide normalmente cerrada (NC) en la entrada de agua y dos flotadores digitales. Parte del MVP, opera completamente local — sin depender de WiFi ni del server.
+> Válvula solenoide normalmente cerrada (NC) en la entrada de agua y un flotador digital. Parte del MVP, opera completamente local — sin depender de WiFi ni del server.
+>
+> **Revisado 9 jul 2026:** el diseño original usaba dos flotadores (30%/90%). Se simplificó a uno solo — la válvula solo necesita una decisión local de abrir/cerrar para mantener un nivel promedio, y el nivel del Totem no se reporta a Capa 2, así que no hay beneficio de telemetría en tener dos umbrales. Ver `docs/capa1/totem-principal/sistema-riego/modulo-suministro.md`.
 
 **Válvula solenoide NC**
 
 - FR-39: El sistema debe incluir una válvula solenoide NC en la tubería de entrada de agua del tanque. Agnóstica a la fuente de agua (tanque padre elevado, llave, manguera u otra fuente con presión positiva)
-- FR-40: La válvula debe abrirse automáticamente cuando el flotador de nivel bajo (~30%) queda en el aire (nivel por debajo del umbral)
-- FR-41: La válvula debe cerrarse automáticamente cuando el flotador de nivel alto (~90%) se activa. En ausencia de corriente o ante fallo del ESP32, la válvula retorna a su estado natural (cerrada) — el desbordamiento es físicamente imposible sin un fallo activo
+- FR-40: La válvula debe abrirse automáticamente cuando el flotador queda en el aire (nivel bajo)
+- FR-41: La válvula debe cerrarse automáticamente cuando el flotador vuelve a quedar sumergido (nivel recuperado). En ausencia de corriente o ante fallo del ESP32, la válvula retorna a su estado natural (cerrada) — el desbordamiento es físicamente imposible sin un fallo activo
 
 **LEDs de indicación**
 
-- FR-42: La unidad física debe incluir dos LEDs: LED rojo (flotador del 30% en el aire — nivel bajo) y LED verde (flotador del 90% sumergido — tanque lleno). Se actualizan en tiempo real sin depender de conectividad.
+- FR-42: La unidad física debe incluir dos LEDs: LED rojo (flotador en el aire — nivel bajo) y LED verde (flotador sumergido — nivel suficiente). Se actualizan en tiempo real sin depender de conectividad.
+
+---
+
+### FR — Sensores de Calidad de Agua (Totem) · FR-43
+
+> **Añadido 9 jul 2026.** Además de medir pH y EC en el tanque padre (`docs/capa1/tanque-de-suministro/sistema-tanque-suministro.md`), el Totem mide su **propia** solución — el punto de entrega real a la raíz, que puede diferir del tanque padre por evaporación (concentra sales con el tiempo) u otros factores. Habilita corrección manual localizada por el usuario y es la base técnica para una futura mezcla dinámica entre múltiples tanques padre (idea capturada, no diseñada aún — ver `docs/planned-features.md`).
+>
+> Es puramente una adición de firmware + hardware (sensores nuevos conectados al ESP32 del Totem) — no requiere cambios de esquema en Capa 2 (la tabla `readings` ya está diseñada para columnas nullable por sensor, independientes del tipo de unidad) ni cambios en la lógica de decisión de riego existente. Se distribuye vía OTA a unidades ya desplegadas sin necesidad de reprogramación física, salvo la instalación de los sensores.
+
+- FR-43: El Totem debe soportar sensores de pH y EC en su propio tanque, leídos y reportados con el mismo mecanismo que el resto de sensores ambientales (mismo ciclo de lectura, mismo buffer offline, mismo topic MQTT `readings`). La presencia de estos sensores es opcional por unidad — su ausencia se reporta como `NULL`, igual que cualquier otro sensor no instalado (ver FR-01)
 
 ---
 

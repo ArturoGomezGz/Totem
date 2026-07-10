@@ -22,7 +22,6 @@ class ReadingsSnapshot(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     light: Optional[float] = None
-    co2: Optional[float] = None
     timestamp: Optional[str] = None
 
 
@@ -66,7 +65,6 @@ class ReadingOut(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     light: Optional[float] = None
-    co2: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -455,7 +453,7 @@ def deactivate_unit(
     summary="Histórico de lecturas de sensores de una unidad",
     description="""
 **¿Qué hace?**
-Devuelve lecturas históricas de sensores (temperatura, humedad, luz, CO₂) para una unidad,
+Devuelve lecturas históricas de sensores (temperatura, humedad, luz) para una unidad,
 ordenadas de más reciente a más antigua.
 
 **¿Para qué?**
@@ -659,8 +657,6 @@ def assign_profile(
             "humidity_max": profile.humidity_max,
             "light_min": profile.light_min,
             "light_max": profile.light_max,
-            "co2_min": profile.co2_min,
-            "co2_max": profile.co2_max,
             "irrigation_method": profile.irrigation_method,
             "irrigation_params": profile.irrigation_params,
         },

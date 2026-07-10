@@ -1,7 +1,7 @@
 import { Input, Select } from '../design-system'
 
 const PLACEHOLDER_PARAMS = `{
-  "threshold_pn": 8.5,
+  "threshold_vpd_kpa": 0.85,
   "cycle_duration_s": 30,
   "min_interval_s": 900
 }`
@@ -9,7 +9,7 @@ const PLACEHOLDER_PARAMS = `{
 // Único método implementado hoy en firmware/simulador (ver docs/transversal/crop-profile.md);
 // fixed_timer y lookup_table solo existen como ejemplos ilustrativos en la documentación.
 const KNOWN_METHODS = {
-  pn_threshold: ['threshold_pn', 'cycle_duration_s', 'min_interval_s'],
+  vpd_threshold: ['threshold_vpd_kpa', 'cycle_duration_s', 'min_interval_s'],
 }
 
 const eyebrow = {
@@ -24,7 +24,6 @@ export const EMPTY_PROFILE_FORM = {
   temp_min: '', temp_max: '',
   humidity_min: '', humidity_max: '',
   light_min: '', light_max: '',
-  co2_min: '', co2_max: '',
   irrigation_method: '', irrigation_params: '',
 }
 
@@ -37,8 +36,6 @@ export function profileToForm(p) {
     humidity_max: p.humidity_max != null ? String(p.humidity_max) : '',
     light_min: p.light_min   != null ? String(p.light_min)   : '',
     light_max: p.light_max   != null ? String(p.light_max)   : '',
-    co2_min: p.co2_min       != null ? String(p.co2_min)     : '',
-    co2_max: p.co2_max       != null ? String(p.co2_max)     : '',
     irrigation_method: p.irrigation_method ?? '',
     irrigation_params: JSON.stringify(p.irrigation_params, null, 2),
   }
@@ -57,7 +54,6 @@ export function formToProfileBody(form, organization_id) {
     temp_min: toFloat(form.temp_min),     temp_max: toFloat(form.temp_max),
     humidity_min: toFloat(form.humidity_min), humidity_max: toFloat(form.humidity_max),
     light_min: toFloat(form.light_min),   light_max: toFloat(form.light_max),
-    co2_min: toFloat(form.co2_min),       co2_max: toFloat(form.co2_max),
     irrigation_method: form.irrigation_method,
     irrigation_params: JSON.parse(form.irrigation_params),
   }
@@ -85,8 +81,6 @@ export default function ProfileFormFields({
           <Input label="Humedad máxima (%)"   value={form.humidity_max} onChange={handleChange('humidity_max')} type="number" step="any" />
           <Input label="Luz mínima (PAR)"     value={form.light_min}    onChange={handleChange('light_min')}    type="number" step="any" />
           <Input label="Luz máxima (PAR)"     value={form.light_max}    onChange={handleChange('light_max')}    type="number" step="any" />
-          <Input label="CO₂ mínimo (ppm)"     value={form.co2_min}      onChange={handleChange('co2_min')}      type="number" step="any" />
-          <Input label="CO₂ máximo (ppm)"     value={form.co2_max}      onChange={handleChange('co2_max')}      type="number" step="any" />
         </div>
       </div>
 
@@ -99,7 +93,7 @@ export default function ProfileFormFields({
           required
         >
           <option value="">Selecciona un método</option>
-          <option value="pn_threshold">pn_threshold</option>
+          <option value="vpd_threshold">vpd_threshold</option>
           {form.irrigation_method && !KNOWN_METHODS[form.irrigation_method] && (
             <option value={form.irrigation_method}>{form.irrigation_method} (no reconocido)</option>
           )}

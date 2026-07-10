@@ -10,13 +10,15 @@ Cada unidad Totem tiene un perfil activo asignado en todo momento. El perfil pue
 
 ### Condición de disparo de riego
 
-- **Umbral de Pn** — valor de tasa de fotosíntesis estimada por debajo del cual el sistema activa la bomba. Cuando Pn calculado < umbral → riego ON (FR-03). Unidad y escala pendientes de la selección del modelo ML.
+**Decisión — 10 jul 2026:** el disparo de riego se basa en VPD (Déficit de Presión de Vapor), no en Pn estimado por ML. Ver justificación completa en `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
+
+- **Umbral de VPD** (kPa) — valor de déficit de presión de vapor por encima del cual el sistema activa la bomba. Cuando VPD calculado ≥ umbral → riego ON (FR-03). Referencia de literatura CEA: rango óptimo general 0.5–0.8 kPa; a afinar por especie.
 
 ### Duración del ciclo de riego
 
-- La duración **no es un valor fijo** — se calcula dinámicamente en función del valor de Pn en el momento de la decisión
-- Principio general: un Pn más bajo (planta más estresada) implica un ciclo de riego más largo
-- 🔴 **Pendiente:** la función exacta que mapea Pn → duración del ciclo (función lineal, tabla de rangos discretos, u otra). Ver `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
+- La duración **no es un valor fijo** — se calcula dinámicamente como `duración_base × f(VPD) × g(Li)`
+- Principio general: un VPD más alto (mayor demanda evaporativa) implica un ciclo de riego más largo; mayor intensidad lumínica también lo alarga (modulador simple, sin ML en el MVP — ver `modulo-decision.md`)
+- 🔴 **Pendiente (alcance reducido):** los parámetros concretos de `f(VPD)` y `g(Li)` (función lineal, tabla de rangos discretos, u otra) — pendiente de calibración, no de selección de enfoque. Ver `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
 
 ### Rangos ideales de variables ambientales
 
@@ -26,8 +28,9 @@ Usados para detección de condiciones fuera de rango y generación de alertas (F
 |---|---|---|
 | Temperatura (T) | °C | rango mínimo–máximo |
 | Humedad relativa (RH) | % | rango mínimo–máximo |
-| Intensidad lumínica (Li) | µmol/m²/s | 🔴 pendiente confirmar unidad según sensor seleccionado |
-| CO₂ | ppm | rango mínimo–máximo |
+| Intensidad lumínica (Li) | µmol/m²/s | 🔴 pendiente confirmar unidad según sensor seleccionado — sensor actual del prototipo (fotorresistor/LDR) no da mediciones confiables, pendiente de reemplazo y validación |
+
+CO₂ fue evaluado y descartado del conjunto de sensores (10 jul 2026) — ya no aplica como rango de alerta. Ver `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
 
 ---
 
@@ -47,9 +50,9 @@ Usados para detección de condiciones fuera de rango y generación de alertas (F
 
 ## Pendientes de definir
 
-- **Función Pn → duración del ciclo** — bloqueante para la implementación del Módulo de Decisión de Riego
-- **Valores de referencia por especie** — rangos ideales concretos para las especies contempladas (lechuga, albahaca, cilantro, etc.). Se definen en paralelo con el desarrollo del modelo de Pn y la revisión de literatura agronómica.
-- **Unidad de Li** — lux vs. µmol/m²/s — depende del sensor seleccionado
+- **Parámetros de `f(VPD)` y `g(Li)`** — bloqueante para la implementación completa del Módulo de Decisión de Riego, aunque el enfoque ya está decidido (VPD + modulador de luz, sin ML)
+- **Valores de referencia por especie** — umbral de VPD concreto para las especies contempladas (lechuga, albahaca, cilantro, etc.), partiendo de la referencia general de literatura CEA (0.5–0.8 kPa)
+- **Unidad de Li** — lux vs. µmol/m²/s — depende del sensor seleccionado (sensor actual del prototipo aún no validado)
 - **Validaciones de rango** — ¿puede el usuario ingresar cualquier valor, o hay límites para evitar configuraciones peligrosas?
 - **Perfil por defecto (factory state)** — ¿qué hace el ESP32 si arranca por primera vez sin haber recibido nunca un perfil? ¿Valores conservadores hardcodeados, o espera conexión antes de operar? Ver `docs/ecosistema/overview.md` — decisiones pendientes.
 
@@ -58,6 +61,6 @@ Usados para detección de condiciones fuera de rango y generación de alertas (F
 ## Documentos relacionados
 
 - `docs/requirements.md` — FR-02, FR-03, FR-07, FR-09, FR-16, FR-17, FR-32
-- `docs/capa1/totem-principal/sistema-decision/modulo-decision.md` — el umbral de Pn y la función de duración dependen del modelo ML
+- `docs/capa1/totem-principal/sistema-decision/modulo-decision.md` — el umbral de VPD y los parámetros de `f(VPD)`/`g(Li)` — decisión del 10 jul 2026
 - `docs/ecosistema/overview.md` — el perfil vive en la DB de Capa 2 y se cachea en flash del ESP32
 - `docs/capa2/schema.md` — tabla `crop_profiles`

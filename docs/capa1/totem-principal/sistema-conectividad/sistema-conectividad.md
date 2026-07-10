@@ -16,7 +16,7 @@ El ESP32 mantiene una conexión persistente con el broker Mosquitto. Al conectar
 
 | Topic | Contenido | QoS |
 |---|---|---|
-| `totem/{unit_id}/readings` | Lectura de sensores (T, RH, Li, CO₂) | 1 |
+| `totem/{unit_id}/readings` | Lectura de sensores (T, RH, Li) | 1 |
 | `totem/{unit_id}/events` | Evento de bomba (ON/OFF, duración, trigger) | 1 |
 | `totem/{unit_id}/alerts` | Alerta crítica (tanque bajo, sensor desconectado, fallo de bomba) | 1 |
 | `totem/{unit_id}/status` | `{"firmware_version": "x.y.z"}` — retenido (retain=1), publicado al conectar (incluye el reinicio tras un OTA). Es como el server se entera de qué versión corre realmente el dispositivo | 1 |

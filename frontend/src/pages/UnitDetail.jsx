@@ -16,7 +16,6 @@ const SENSOR_ACCENTS = {
   temperature: 'var(--teal-500)',
   humidity:    'var(--blue-700)',
   light:       'var(--lime-500)',
-  co2:         'var(--ink-500)',
 }
 
 export default function UnitDetail() {
@@ -162,7 +161,6 @@ export default function UnitDetail() {
                 <StatCard value={r.temperature != null ? `${r.temperature} °C` : '—'} label="Temperatura" accent={SENSOR_ACCENTS.temperature} />
                 <StatCard value={r.humidity    != null ? `${r.humidity} %`    : '—'} label="Humedad"      accent={SENSOR_ACCENTS.humidity}    />
                 <StatCard value={r.light       != null ? `${r.light}`         : '—'} label="Luz PAR"      accent={SENSOR_ACCENTS.light}       />
-                <StatCard value={r.co2         != null ? `${r.co2}`           : '—'} label="CO₂ ppm"      accent={SENSOR_ACCENTS.co2}         />
               </div>
             </div>
           ) : (
