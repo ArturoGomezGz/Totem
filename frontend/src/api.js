@@ -119,6 +119,8 @@ const realApi = {
   getTelegramLinkToken: ()        => request('POST',   '/telegram/link-token'),
   deleteTelegramLink:   ()        => request('DELETE', '/telegram/link'),
 
+  getIrrigationMethods: () => request('GET', '/irrigation-methods'),
+
   getProfiles:   (organization_id)          => request('GET',    `/profiles?organization_id=${organization_id}`),
   createProfile: (body)                     => request('POST',   '/profiles', body),
   updateProfile: (id, body)                 => request('PUT',    `/profiles/${id}`, body),
@@ -126,10 +128,13 @@ const realApi = {
   assignProfile: (unit_id, profile_id)      => request('PUT',    `/units/${unit_id}/profile`, { profile_id }),
 
   getFirmwareReleases: (organization_id) => request('GET', `/firmware?organization_id=${organization_id}`),
-  uploadFirmware: async ({ organization_id, description, file }, _retry = false) => {
+  uploadFirmware: async ({ organization_id, description, file, supported_irrigation_methods }, _retry = false) => {
     const form = new FormData()
     form.append('organization_id', organization_id)
     if (description) form.append('description', description)
+    for (const method of supported_irrigation_methods ?? []) {
+      form.append('supported_irrigation_methods', method)
+    }
     form.append('file', file)
 
     const token = getToken()
@@ -139,7 +144,7 @@ const realApi = {
     const res = await fetch(`${BASE}/firmware`, { method: 'POST', headers, body: form })
     if (res.status === 401 && token) {
       if (!_retry && (await refreshAccessToken())) {
-        return realApi.uploadFirmware({ organization_id, description, file }, true)
+        return realApi.uploadFirmware({ organization_id, description, file, supported_irrigation_methods }, true)
       }
       clearTokens()
       window.location.href = '/login'

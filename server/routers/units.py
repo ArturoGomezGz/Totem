@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 import state
 from auth import get_current_user
 from db import get_db
-from models import CropProfile, DeviceEvent, Membership, Reading, TotemConfig, Unit, User
+from models import CropProfile, DeviceEvent, FirmwareRelease, Membership, Reading, TotemConfig, Unit, User
 from mqtt import mqtt_client
 
 router = APIRouter(tags=["units"])
@@ -605,7 +605,7 @@ Vista de detalle de unidad — sección "Perfil activo" en la pestaña En vivo.
         401: {"description": "Token ausente, inválido o expirado"},
         403: {"description": "La unidad no pertenece a una organización del usuario"},
         404: {"description": "Unidad o perfil no encontrado"},
-        409: {"description": "El perfil no pertenece a la misma organización que la unidad"},
+        409: {"description": "El perfil no pertenece a la misma organización que la unidad, o su irrigation_method no está soportado por el firmware objetivo de la unidad"},
     },
     tags=["units"],
 )
@@ -635,6 +635,21 @@ def assign_profile(
             status_code=409,
             detail="El perfil no pertenece a la misma organización que la unidad",
         )
+
+    # Compatibilidad perfil ↔ firmware: si la unidad tiene un release objetivo
+    # conocido, su binario debe declarar soporte para el método de riego del
+    # perfil. Sin release objetivo (unidad recién creada, sin OTA todavía) no
+    # hay nada que contradecir, así que no se bloquea.
+    if unit.target_firmware_release_id:
+        release = db.query(FirmwareRelease).filter(FirmwareRelease.id == unit.target_firmware_release_id).first()
+        if release and profile.irrigation_method not in release.supported_irrigation_methods:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"El firmware objetivo de esta unidad (v{release.version}) no soporta "
+                    f"el método de riego '{profile.irrigation_method}' de este perfil"
+                ),
+            )
 
     config = db.query(TotemConfig).filter(TotemConfig.unit_id == unit_id).first()
     if config:

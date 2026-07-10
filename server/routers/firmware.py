@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, require_org_admin, require_org_membership
 from config import FIRMWARE_DIR, SERVER_URL
 from db import get_db
-from models import Command, FirmwareRelease, Unit, User
+from models import Command, CropProfile, FirmwareRelease, IrrigationMethod, TotemConfig, Unit, User
 from mqtt import mqtt_client
 
 router = APIRouter(tags=["firmware"])
@@ -60,6 +60,7 @@ class FirmwareReleaseOut(BaseModel):
     uploaded_by: str
     released_at: datetime
     download_url: str
+    supported_irrigation_methods: list[str] = []
 
     model_config = {"from_attributes": True}
 
@@ -81,6 +82,7 @@ def _release_to_out(r: FirmwareRelease) -> FirmwareReleaseOut:
         uploaded_by=str(r.uploaded_by),
         released_at=r.released_at,
         download_url=f"{SERVER_URL}/api/v1/firmware/{r.id}/binary",
+        supported_irrigation_methods=r.supported_irrigation_methods,
     )
 
 
@@ -152,11 +154,17 @@ Flujo de release de firmware — acción "Publicar versión" del panel de admini
 > ya existe una versión con ese nombre en la misma organización, el endpoint
 > devuelve 409 sin sobrescribir el binario existente — hay que cambiar
 > `version.txt` y recompilar.
+
+> **`supported_irrigation_methods`:** el admin declara qué métodos del catálogo
+> (`GET /irrigation-methods`) implementa este binario compilado — no se puede
+> inferir del `.bin`. Se usa para bloquear (409) asignar un perfil con un
+> método no soportado a una unidad con este release, y viceversa. Ver
+> `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
 """,
     response_model=FirmwareReleaseOut,
     status_code=201,
     responses={
-        400: {"description": "El binario no es una imagen válida de ESP-IDF o no tiene versión establecida"},
+        400: {"description": "El binario no es una imagen válida de ESP-IDF, no tiene versión establecida, o supported_irrigation_methods incluye una key desconocida"},
         401: {"description": "Token ausente, inválido o expirado"},
         403: {"description": "Solo los administradores pueden publicar firmware"},
         409: {"description": "Ya existe un release con esa versión en esta organización"},
@@ -165,11 +173,25 @@ Flujo de release de firmware — acción "Publicar versión" del panel de admini
 async def upload_firmware(
     organization_id: str = Form(...),
     description: Optional[str] = Form(None),
+    supported_irrigation_methods: list[str] = Form(default=[]),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_org_admin(organization_id, current_user, db)
+
+    if supported_irrigation_methods:
+        known = {
+            m.key for m in db.query(IrrigationMethod)
+            .filter(IrrigationMethod.key.in_(supported_irrigation_methods))
+            .all()
+        }
+        unknown = set(supported_irrigation_methods) - known
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Métodos de riego desconocidos: {', '.join(sorted(unknown))}",
+            )
 
     content = await file.read()
 
@@ -218,6 +240,7 @@ async def upload_firmware(
         sha256=sha256,
         uploaded_by=current_user.id,
         released_at=datetime.now(timezone.utc),
+        supported_irrigation_methods=supported_irrigation_methods,
     )
     db.add(release)
     db.commit()
@@ -341,6 +364,7 @@ Exactamente uno de los dos campos debe estar presente:
         401: {"description": "Token ausente, inválido o expirado"},
         403: {"description": "Solo los administradores pueden aplicar firmware"},
         404: {"description": "Release, unidad u organización no encontrada"},
+        409: {"description": "Alguna unidad afectada tiene un perfil activo cuyo irrigation_method no soporta este release"},
     },
 )
 def deploy_firmware(
@@ -375,6 +399,16 @@ def deploy_firmware(
 
         require_org_admin(str(unit.organization_id), current_user, db)
 
+        conflict = _incompatible_active_method(unit, release, db)
+        if conflict:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"La unidad tiene activo el perfil '{conflict}' cuyo método de riego "
+                    f"no está soportado por el firmware v{release.version}"
+                ),
+            )
+
         _deploy_to_unit(unit, release, payload, current_user, db)
         db.commit()
         return {"detail": f"Firmware {release.version} aplicado a unidad {body.unit_id}", "version": release.version}
@@ -391,6 +425,21 @@ def deploy_firmware(
         Unit.is_active == True,
     ).all()
 
+    # Bloqueo atómico: si cualquier unidad afectada queda incompatible, no se
+    # aplica a ninguna — evita un despliegue parcial confuso de "aplicó a
+    # algunas, a otras no".
+    conflicts = {}
+    for unit in units:
+        conflict = _incompatible_active_method(unit, release, db)
+        if conflict:
+            conflicts[unit.name] = conflict
+    if conflicts:
+        detail = "; ".join(f"{name} (perfil '{method}')" for name, method in conflicts.items())
+        raise HTTPException(
+            status_code=409,
+            detail=f"El firmware v{release.version} no soporta el método de riego de: {detail}",
+        )
+
     for unit in units:
         _deploy_to_unit(unit, release, payload, current_user, db)
     db.commit()
@@ -400,6 +449,23 @@ def deploy_firmware(
         "version": release.version,
         "units": [str(u.id) for u in units],
     }
+
+
+def _incompatible_active_method(unit: Unit, release: FirmwareRelease, db: Session) -> Optional[str]:
+    """Devuelve el irrigation_method del perfil activo de la unidad si ese
+    método no está soportado por `release`, o None si es compatible (o si la
+    unidad no tiene perfil activo)."""
+    config = db.query(TotemConfig).filter(TotemConfig.unit_id == unit.id).first()
+    if not config or not config.active_profile_id:
+        return None
+
+    profile = db.query(CropProfile).filter(CropProfile.id == config.active_profile_id).first()
+    if not profile:
+        return None
+
+    if profile.irrigation_method not in release.supported_irrigation_methods:
+        return profile.irrigation_method
+    return None
 
 
 def _deploy_to_unit(unit: Unit, release: FirmwareRelease, payload: dict, current_user: User, db: Session) -> None:

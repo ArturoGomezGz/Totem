@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { Button, Alert } from '../design-system'
@@ -10,23 +10,28 @@ export default function ProfileFormPage() {
   const navigate          = useNavigate()
   const { activeOrgId }   = useOrg()
 
-  const [form, setForm]               = useState(EMPTY_PROFILE_FORM)
-  const [formError, setFormError]     = useState(null)
-  const [paramsError, setParamsError] = useState(null)
-  const [paramsFocus, setParamsFocus] = useState(false)
-  const [loading, setLoading]         = useState(false)
+  const [form, setForm]                 = useState(EMPTY_PROFILE_FORM)
+  const [formError, setFormError]       = useState(null)
+  const [methods, setMethods]           = useState([])
+  const [methodsError, setMethodsError] = useState(null)
+  const [loading, setLoading]           = useState(false)
+
+  useEffect(() => {
+    api.getIrrigationMethods()
+      .then(setMethods)
+      .catch(err => setMethodsError(err.message))
+  }, [])
 
   const handleFieldChange = (field, value) => setForm(f => ({ ...f, [field]: value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setFormError(null)
-    setParamsError(null)
     let body
     try {
-      body = formToProfileBody(form, activeOrgId)
-    } catch {
-      setParamsError('No es JSON válido — revisa comas, comillas o llaves faltantes.')
+      body = formToProfileBody(form, activeOrgId, methods)
+    } catch (err) {
+      setFormError(err.message)
       return
     }
     setLoading(true)
@@ -55,10 +60,8 @@ export default function ProfileFormPage() {
           <ProfileFormFields
             form={form}
             onChange={handleFieldChange}
-            paramsError={paramsError}
-            paramsFocus={paramsFocus}
-            onParamsFocus={() => setParamsFocus(true)}
-            onParamsBlur={() => setParamsFocus(false)}
+            methods={methods}
+            methodsError={methodsError}
             autoFocusName
           />
 

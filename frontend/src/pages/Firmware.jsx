@@ -144,13 +144,25 @@ export default function Firmware() {
 
   const [releases, setReleases] = useState([])
   const [units, setUnits]       = useState([])
+  const [methods, setMethods]   = useState([])
   const [error, setError]       = useState(null)
   const [notice, setNotice]     = useState(null)
 
   const [showUpload, setShowUpload] = useState(false)
-  const [form, setForm]             = useState({ description: '', file: null })
+  const [form, setForm]             = useState({ description: '', file: null, supported_irrigation_methods: [] })
   const [uploading, setUploading]   = useState(false)
   const [uploadError, setUploadError] = useState(null)
+
+  useEffect(() => { api.getIrrigationMethods().then(setMethods).catch(() => {}) }, [])
+
+  const toggleMethod = (key) => {
+    setForm(f => ({
+      ...f,
+      supported_irrigation_methods: f.supported_irrigation_methods.includes(key)
+        ? f.supported_irrigation_methods.filter(k => k !== key)
+        : [...f.supported_irrigation_methods, key],
+    }))
+  }
 
   // Solo una acción (aplicar o eliminar) puede estar expandida a la vez,
   // por release — evita estados combinados confusos en la misma card.
@@ -182,8 +194,9 @@ export default function Firmware() {
         organization_id: activeOrgId,
         description: form.description.trim() || undefined,
         file: form.file,
+        supported_irrigation_methods: form.supported_irrigation_methods,
       })
-      setForm({ description: '', file: null })
+      setForm({ description: '', file: null, supported_irrigation_methods: [] })
       setShowUpload(false)
       setNotice(`Versión ${release.version} publicada correctamente.`)
       await load()
@@ -269,6 +282,27 @@ export default function Firmware() {
               hint="La versión se lee automáticamente del binario — no hace falta escribirla."
               onChange={e => setForm(f => ({ ...f, file: e.target.files[0] ?? null }))}
             />
+            <div>
+              <label style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)', display: 'block', marginBottom: 'var(--space-2)' }}>
+                Métodos de riego que soporta este binario
+              </label>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
+                Declara qué métodos del catálogo implementa este compilado — no se puede inferir del `.bin`.
+                Asignar un perfil con un método no marcado aquí a una unidad con este release quedará bloqueado.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                {methods.map(m => (
+                  <label key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.supported_irrigation_methods.includes(m.key)}
+                      onChange={() => toggleMethod(m.key)}
+                    />
+                    {m.name}
+                  </label>
+                ))}
+              </div>
+            </div>
             {uploadError && <Alert tone="danger">{uploadError}</Alert>}
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <Button
@@ -346,6 +380,15 @@ export default function Firmware() {
                     <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
                       {release.description}
                     </p>
+                  )}
+                  {release.supported_irrigation_methods?.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)', marginBottom: 'var(--space-2)' }}>
+                      {release.supported_irrigation_methods.map(key => (
+                        <Badge key={key} tone="neutral">
+                          {methods.find(m => m.key === key)?.name ?? key}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
                   <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                     SHA-256: {shortSha(release.sha256)}

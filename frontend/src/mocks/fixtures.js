@@ -64,6 +64,38 @@ export function seedUnits() {
   ]
 }
 
+export function seedIrrigationMethods() {
+  return [
+    {
+      key: 'fixed_timer', name: 'Timer fijo',
+      description: 'Riega a intervalos y duración constantes, sin retroalimentación ambiental.',
+      params_schema: {
+        type: 'object',
+        required: ['cycle_duration_s', 'min_interval_s'],
+        properties: {
+          cycle_duration_s: { type: 'number', exclusiveMinimum: 0 },
+          min_interval_s: { type: 'number', minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
+      key: 'vpd_threshold', name: 'Umbral de VPD',
+      description: 'Riega cuando el Déficit de Presión de Vapor (T, RH) alcanza el umbral del perfil.',
+      params_schema: {
+        type: 'object',
+        required: ['threshold_vpd_kpa', 'cycle_duration_s', 'min_interval_s'],
+        properties: {
+          threshold_vpd_kpa: { type: 'number', exclusiveMinimum: 0 },
+          cycle_duration_s: { type: 'number', exclusiveMinimum: 0 },
+          min_interval_s: { type: 'number', minimum: 0 },
+        },
+        additionalProperties: false,
+      },
+    },
+  ]
+}
+
 export function seedFirmwareReleases() {
   return [
     {
@@ -71,14 +103,14 @@ export function seedFirmwareReleases() {
       description: 'Primera versión estable — lectura de sensores y bomba manual.',
       sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678901234567890abcdef12345',
       uploaded_by: 'user-demo', released_at: hoursAgo(24 * 30),
-      download_url: '#',
+      download_url: '#', supported_irrigation_methods: ['fixed_timer'],
     },
     {
       id: 'fw-release-2', organization_id: 'org-demo', version: '1.0.0',
-      description: 'Agrega buffer offline y reconexión MQTT automática.',
+      description: 'Agrega buffer offline, reconexión MQTT automática y riego por VPD.',
       sha256: 'f0e1d2c3b4a5968778695a4b3c2d1e0f0918273645afedcba9876543210fed1',
       uploaded_by: 'user-demo', released_at: hoursAgo(24 * 7),
-      download_url: '#',
+      download_url: '#', supported_irrigation_methods: ['fixed_timer', 'vpd_threshold'],
     },
   ]
 }

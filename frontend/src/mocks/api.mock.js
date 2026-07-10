@@ -13,6 +13,37 @@ function notFound(detail) {
   return Promise.reject(err)
 }
 
+// Validador mínimo — replica el subconjunto de JSON Schema que usan los
+// params_schema del catálogo (required, properties.type=number,
+// additionalProperties=false). No es un validador general de JSON Schema;
+// alcanza para los dos métodos definidos en fixtures.js.
+function validateAgainstSchema(instance, schema) {
+  for (const key of schema.required ?? []) {
+    if (!(key in instance)) return `falta el campo requerido "${key}"`
+  }
+  if (schema.additionalProperties === false) {
+    const allowed = new Set(Object.keys(schema.properties ?? {}))
+    for (const key of Object.keys(instance)) {
+      if (!allowed.has(key)) return `campo no reconocido "${key}"`
+    }
+  }
+  for (const [key, spec] of Object.entries(schema.properties ?? {})) {
+    if (!(key in instance)) continue
+    const value = instance[key]
+    if (spec.type === 'number' && typeof value !== 'number') return `"${key}" debe ser numérico`
+    if (typeof spec.minimum === 'number' && value < spec.minimum) return `"${key}" debe ser >= ${spec.minimum}`
+    if (typeof spec.exclusiveMinimum === 'number' && value <= spec.exclusiveMinimum) return `"${key}" debe ser > ${spec.exclusiveMinimum}`
+  }
+  return null
+}
+
+function validateIrrigationMethod(irrigation_method, irrigation_params) {
+  const method = store.irrigationMethods.find(m => m.key === irrigation_method)
+  if (!method) throw new Error(`Método de riego desconocido: ${irrigation_method}`)
+  const error = validateAgainstSchema(irrigation_params, method.params_schema)
+  if (error) throw new Error(`irrigation_params inválido para ${irrigation_method}: ${error}`)
+}
+
 export const mockApi = {
   // ---------- Auth ----------
   register: async (_email, _password) => {
@@ -204,12 +235,18 @@ export const mockApi = {
   },
 
   // ---------- Crop profiles ----------
+  getIrrigationMethods: async () => { await delay(); return store.irrigationMethods },
   getProfiles: async (organization_id) => {
     await delay()
     return store.profiles.filter(p => p.organization_id === organization_id)
   },
   createProfile: async (body) => {
     await delay()
+    try {
+      validateIrrigationMethod(body.irrigation_method, body.irrigation_params)
+    } catch (err) {
+      return notFound(err.message)
+    }
     const now = new Date().toISOString()
     const profile = { id: uid(), created_at: now, updated_at: now, ...body }
     store.profiles.push(profile)
@@ -219,6 +256,11 @@ export const mockApi = {
     await delay()
     const idx = store.profiles.findIndex(p => p.id === id)
     if (idx === -1) return notFound('Perfil no encontrado')
+    try {
+      validateIrrigationMethod(body.irrigation_method, body.irrigation_params)
+    } catch (err) {
+      return notFound(err.message)
+    }
     store.profiles[idx] = { ...store.profiles[idx], ...body, updated_at: new Date().toISOString() }
     return store.profiles[idx]
   },
@@ -242,6 +284,18 @@ export const mockApi = {
     }
     const profile = store.profiles.find(p => p.id === profile_id)
     if (!profile) return notFound('Perfil no encontrado')
+
+    // Compatibilidad perfil ↔ firmware objetivo de la unidad, igual que el
+    // check del server (routers/units.py assign_profile).
+    if (unit.target_firmware_release_id) {
+      const release = store.firmwareReleases.find(r => r.id === unit.target_firmware_release_id)
+      if (release && !release.supported_irrigation_methods.includes(profile.irrigation_method)) {
+        return notFound(
+          `El firmware objetivo de esta unidad (v${release.version}) no soporta el método de riego '${profile.irrigation_method}' de este perfil`
+        )
+      }
+    }
+
     unit.active_profile_id = profile_id
     return { detail: 'Perfil asignado' }
   },
@@ -253,8 +307,13 @@ export const mockApi = {
       .filter(r => r.organization_id === organization_id)
       .sort((a, b) => new Date(b.released_at) - new Date(a.released_at))
   },
-  uploadFirmware: async ({ organization_id, description }) => {
+  uploadFirmware: async ({ organization_id, description, supported_irrigation_methods }) => {
     await delay(400)
+    const methods = supported_irrigation_methods ?? []
+    const unknown = methods.filter(key => !store.irrigationMethods.some(m => m.key === key))
+    if (unknown.length > 0) {
+      return notFound(`Métodos de riego desconocidos: ${unknown.join(', ')}`)
+    }
     // En real, la versión se lee del binario subido — el mock no tiene un
     // binario real que parsear, así que simula el mismo efecto incrementando
     // el patch de la última versión publicada en la organización.
@@ -270,6 +329,7 @@ export const mockApi = {
       id: uid(), organization_id, version, description: description || null,
       sha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
       uploaded_by: 'user-demo', released_at: new Date().toISOString(), download_url: '#',
+      supported_irrigation_methods: methods,
     }
     store.firmwareReleases.push(release)
     return release
@@ -279,9 +339,23 @@ export const mockApi = {
     const release = store.firmwareReleases.find(r => r.id === release_id)
     if (!release) return notFound('Release no encontrado')
 
+    // Mismo check de compatibilidad que el server: bloquea si la unidad (o
+    // alguna del lote, para despliegue por organización) tiene un perfil
+    // activo cuyo método no soporta este release.
+    const incompatible = (unit) => {
+      if (!unit.active_profile_id) return null
+      const profile = store.profiles.find(p => p.id === unit.active_profile_id)
+      if (!profile) return null
+      return release.supported_irrigation_methods.includes(profile.irrigation_method) ? null : profile.irrigation_method
+    }
+
     if (target.unit_id) {
       const unit = store.units.find(u => u.id === target.unit_id)
       if (!unit) return notFound('Unidad no encontrada')
+      const conflict = incompatible(unit)
+      if (conflict) {
+        return notFound(`La unidad tiene activo un perfil '${conflict}' que el firmware v${release.version} no soporta`)
+      }
       unit.target_firmware_release_id = release.id
       return { detail: `Firmware ${release.version} aplicado a unidad ${unit.name}`, version: release.version }
     }
@@ -289,6 +363,14 @@ export const mockApi = {
     const units = store.units.filter(
       u => u.organization_id === target.organization_id && u.type === 'totem' && u.is_active
     )
+    const conflicts = units
+      .map(u => ({ unit: u, conflict: incompatible(u) }))
+      .filter(x => x.conflict)
+    if (conflicts.length > 0) {
+      const detail = conflicts.map(x => `${x.unit.name} (perfil '${x.conflict}')`).join('; ')
+      return notFound(`El firmware v${release.version} no soporta el método de riego de: ${detail}`)
+    }
+
     units.forEach(u => { u.target_firmware_release_id = release.id })
     return {
       detail: `Firmware ${release.version} aplicado a ${units.length} unidades`,

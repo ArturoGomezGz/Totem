@@ -54,6 +54,21 @@ class Unit(Base):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
 
 
+class IrrigationMethod(Base):
+    """Catálogo de métodos de riego (fixed_timer, vpd_threshold, ...). No es
+    privado por organización — es taxonomía del sistema. `params_schema` es
+    un JSON Schema que valida `crop_profiles.irrigation_params` para perfiles
+    que usan este método."""
+
+    __tablename__ = "irrigation_methods"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    params_schema: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
+
+
 class CropProfile(Base):
     __tablename__ = "crop_profiles"
 
@@ -67,7 +82,7 @@ class CropProfile(Base):
     humidity_max: Mapped[Optional[float]] = mapped_column(Float)
     light_min: Mapped[Optional[float]] = mapped_column(Float)
     light_max: Mapped[Optional[float]] = mapped_column(Float)
-    irrigation_method: Mapped[str] = mapped_column(String, nullable=False)
+    irrigation_method: Mapped[str] = mapped_column(String, ForeignKey("irrigation_methods.key"), nullable=False)
     irrigation_params: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
@@ -145,6 +160,7 @@ class FirmwareRelease(Base):
     sha256: Mapped[str] = mapped_column(String, nullable=False)
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     released_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
+    supported_irrigation_methods: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
 
 class TelegramUser(Base):

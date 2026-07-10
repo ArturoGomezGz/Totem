@@ -42,12 +42,12 @@ export default function ProfileDetail() {
   const [loadError, setLoadError] = useState(null)
   const [loading, setLoading]     = useState(true)
 
-  const [editing, setEditing]         = useState(false)
-  const [form, setForm]               = useState(null)
-  const [formError, setFormError]     = useState(null)
-  const [paramsError, setParamsError] = useState(null)
-  const [paramsFocus, setParamsFocus] = useState(false)
-  const [saving, setSaving]           = useState(false)
+  const [editing, setEditing]           = useState(false)
+  const [form, setForm]                 = useState(null)
+  const [formError, setFormError]       = useState(null)
+  const [saving, setSaving]             = useState(false)
+  const [methods, setMethods]           = useState([])
+  const [methodsError, setMethodsError] = useState(null)
 
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting]           = useState(false)
@@ -67,10 +67,15 @@ export default function ProfileDetail() {
 
   useEffect(load, [activeOrgId, profileId]) // eslint-disable-line
 
+  useEffect(() => {
+    api.getIrrigationMethods()
+      .then(setMethods)
+      .catch(err => setMethodsError(err.message))
+  }, [])
+
   const startEditing = () => {
     setForm(profileToForm(profile))
     setFormError(null)
-    setParamsError(null)
     setEditing(true)
   }
 
@@ -84,12 +89,11 @@ export default function ProfileDetail() {
   const handleSave = async (e) => {
     e.preventDefault()
     setFormError(null)
-    setParamsError(null)
     let body
     try {
-      body = formToProfileBody(form, activeOrgId)
-    } catch {
-      setParamsError('No es JSON válido — revisa comas, comillas o llaves faltantes.')
+      body = formToProfileBody(form, activeOrgId, methods)
+    } catch (err) {
+      setFormError(err.message)
       return
     }
     setSaving(true)
@@ -161,10 +165,8 @@ export default function ProfileDetail() {
             <ProfileFormFields
               form={form}
               onChange={handleFieldChange}
-              paramsError={paramsError}
-              paramsFocus={paramsFocus}
-              onParamsFocus={() => setParamsFocus(true)}
-              onParamsBlur={() => setParamsFocus(false)}
+              methods={methods}
+              methodsError={methodsError}
             />
             <div style={{ display: 'flex', gap: 'var(--space-3)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border-subtle)' }}>
               <Button type="submit" disabled={saving}>
@@ -187,7 +189,7 @@ export default function ProfileDetail() {
 
             <Card>
               <span style={eyebrow}>Parámetros de riego</span>
-              <InfoRow label="Método" value={profile.irrigation_method} />
+              <InfoRow label="Método" value={methods.find(m => m.key === profile.irrigation_method)?.name ?? profile.irrigation_method} />
               <div style={{ marginTop: 'var(--space-3)' }}>
                 <pre style={{
                   fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-strong)',

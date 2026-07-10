@@ -2,18 +2,28 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import jsonschema
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from db import get_db
-from models import CropProfile, Membership, TotemConfig, Unit, User
+from models import CropProfile, IrrigationMethod, Membership, TotemConfig, Unit, User
 
 router = APIRouter(tags=["profiles"])
 
 
 # ---------- Schemas ----------
+
+class IrrigationMethodOut(BaseModel):
+    key: str
+    name: str
+    description: Optional[str] = None
+    params_schema: dict
+
+    model_config = {"from_attributes": True}
+
 
 class CropProfileOut(BaseModel):
     id: str
@@ -60,7 +70,53 @@ def _require_org_membership(organization_id: str, current_user: User, db: Sessio
     return membership
 
 
+def validate_irrigation_method(irrigation_method: str, irrigation_params: dict, db: Session) -> None:
+    """Verifica que el método exista en el catálogo y que irrigation_params
+    cumpla su params_schema. Usado por create/update de perfiles."""
+    method = db.query(IrrigationMethod).filter(IrrigationMethod.key == irrigation_method).first()
+    if not method:
+        raise HTTPException(status_code=400, detail=f"Método de riego desconocido: {irrigation_method}")
+
+    try:
+        jsonschema.validate(instance=irrigation_params, schema=method.params_schema)
+    except jsonschema.ValidationError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"irrigation_params inválido para {irrigation_method}: {e.message}",
+        )
+
+
 # ---------- Endpoints ----------
+
+@router.get(
+    "/irrigation-methods",
+    summary="Listar el catálogo de métodos de riego",
+    description="""
+**¿Qué hace?**
+Devuelve todos los métodos de riego disponibles en el sistema (`fixed_timer`,
+`vpd_threshold`, etc.), cada uno con su JSON Schema de parámetros.
+
+**¿Para qué?**
+El frontend usa `params_schema` para renderizar dinámicamente los campos
+correctos del formulario de perfil de cultivo según el método elegido, y
+para poblar el selector de métodos soportados al publicar un release de
+firmware.
+
+**¿Dónde se usa?**
+Formulario de perfil de cultivo y formulario de publicación de firmware.
+""",
+    response_model=list[IrrigationMethodOut],
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+    },
+)
+def list_irrigation_methods(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    methods = db.query(IrrigationMethod).order_by(IrrigationMethod.key).all()
+    return [IrrigationMethodOut.model_validate(m) for m in methods]
+
 
 @router.get(
     "/profiles",
@@ -136,6 +192,7 @@ Página de gestión de perfiles de cultivo — formulario de creación.
     response_model=CropProfileOut,
     status_code=201,
     responses={
+        400: {"description": "Método de riego desconocido o irrigation_params no cumple su esquema"},
         401: {"description": "Token ausente, inválido o expirado"},
         403: {"description": "El usuario no pertenece a esta organización"},
     },
@@ -146,6 +203,7 @@ def create_profile(
     current_user: User = Depends(get_current_user),
 ):
     _require_org_membership(body.organization_id, current_user, db)
+    validate_irrigation_method(body.irrigation_method, body.irrigation_params, db)
 
     now = datetime.now(timezone.utc)
     profile = CropProfile(
@@ -204,6 +262,7 @@ Página de gestión de perfiles — acción "Editar" en cada perfil.
 """,
     response_model=CropProfileOut,
     responses={
+        400: {"description": "Método de riego desconocido o irrigation_params no cumple su esquema"},
         401: {"description": "Token ausente, inválido o expirado"},
         403: {"description": "El usuario no pertenece a esta organización"},
         404: {"description": "Perfil no encontrado"},
@@ -220,6 +279,7 @@ def update_profile(
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
 
     _require_org_membership(str(profile.organization_id), current_user, db)
+    validate_irrigation_method(body.irrigation_method, body.irrigation_params, db)
 
     profile.organization_id = body.organization_id
     profile.name = body.name
