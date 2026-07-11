@@ -13,6 +13,7 @@ const eyebrow = {
 const PARAM_LABELS = {
   threshold_vpd_kpa: 'Umbral de VPD (kPa)',
   cycle_duration_s: 'Duración del ciclo (s)',
+  base_duration_s: 'Duración base del ciclo (s)',
   min_interval_s: 'Intervalo mínimo entre ciclos (s)',
 }
 

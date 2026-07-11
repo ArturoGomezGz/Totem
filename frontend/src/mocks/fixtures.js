@@ -81,13 +81,17 @@ export function seedIrrigationMethods() {
     },
     {
       key: 'vpd_threshold', name: 'Umbral de VPD',
-      description: 'Riega cuando el Déficit de Presión de Vapor (T, RH) alcanza el umbral del perfil.',
+      description: (
+        'Riega cuando el Déficit de Presión de Vapor (T, RH) alcanza el umbral del perfil. ' +
+        'La duración escala con VPD y con la luz respecto al rango ideal del perfil ' +
+        '(base_duration_s × f(VPD) × g(Li)).'
+      ),
       params_schema: {
         type: 'object',
-        required: ['threshold_vpd_kpa', 'cycle_duration_s', 'min_interval_s'],
+        required: ['threshold_vpd_kpa', 'base_duration_s', 'min_interval_s'],
         properties: {
           threshold_vpd_kpa: { type: 'number', exclusiveMinimum: 0 },
-          cycle_duration_s: { type: 'number', exclusiveMinimum: 0 },
+          base_duration_s: { type: 'number', exclusiveMinimum: 0 },
           min_interval_s: { type: 'number', minimum: 0 },
         },
         additionalProperties: false,
@@ -122,7 +126,7 @@ export function seedProfiles() {
       temp_min: 18, temp_max: 26, humidity_min: 55, humidity_max: 75,
       light_min: 150, light_max: 400,
       irrigation_method: 'vpd_threshold',
-      irrigation_params: { threshold_vpd_kpa: 0.85, cycle_duration_s: 30, min_interval_s: 900 },
+      irrigation_params: { threshold_vpd_kpa: 0.85, base_duration_s: 30, min_interval_s: 900 },
       created_at: hoursAgo(24 * 10), updated_at: hoursAgo(24 * 3),
     },
     {
@@ -130,7 +134,7 @@ export function seedProfiles() {
       temp_min: 20, temp_max: 30, humidity_min: 50, humidity_max: 70,
       light_min: 200, light_max: 450,
       irrigation_method: 'vpd_threshold',
-      irrigation_params: { threshold_vpd_kpa: 0.95, cycle_duration_s: 25, min_interval_s: 1200 },
+      irrigation_params: { threshold_vpd_kpa: 0.95, base_duration_s: 25, min_interval_s: 1200 },
       created_at: hoursAgo(24 * 8), updated_at: hoursAgo(24 * 8),
     },
   ]

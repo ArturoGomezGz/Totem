@@ -61,14 +61,23 @@ Donde `T` es temperatura en °C y `RH` es humedad relativa en %.
 
 ### Duración del ciclo
 
+**Decisión — 11 jul 2026.** Se cierra OI-IRR-02: la duración escala tanto con VPD como con luz, sin parámetros nuevos en el perfil — reutiliza `threshold_vpd_kpa` y el rango `light_min`/`light_max` que el perfil ya define para alertas.
+
 ```
-duración_riego = duración_base(perfil) × f(VPD) × g(Li)
+f(VPD) = clamp(VPD / threshold_vpd_kpa, 1.0, 2.0)
+
+light_ref = (light_min + light_max) / 2         — si ambos están definidos
+          = 1.0 (sin modulación)                 — si el rango no está definido
+g(Li)  = clamp(Li / light_ref, 0.5, 1.5)
+
+duración_riego = base_duration_s(perfil) × f(VPD) × g(Li)
 ```
 
-- `f(VPD)` — escala hacia arriba cuando VPD se acerca o supera el umbral del perfil (más déficit → ciclo más largo).
-- `g(Li)` — coeficiente simple (lineal o tabla de rangos), sin modelo ML, que escala hacia arriba con mayor intensidad lumínica. Ver razones arriba para mantenerlo simple en el MVP.
+- `f(VPD)` — el disparo ya exige `VPD ≥ threshold_vpd_kpa`, así que el cociente siempre parte de 1.0; se limita a 2.0 como techo para no alargar el ciclo indefinidamente ante una lectura extrema o un sensor con ruido.
+- `g(Li)` — compara la luz actual contra el punto medio del rango ideal ya configurado en el perfil (`light_min`/`light_max`). Más luz que ese punto medio alarga el ciclo (hasta 1.5×, más transpiración esperada); menos luz lo acorta (hasta 0.5×, menor demanda). Si el perfil no tiene rango de luz definido, `g(Li) = 1.0` — el modulador simplemente no aplica, no bloquea el cálculo.
+- Los topes (1.0–2.0 y 0.5–1.5) son **constantes del firmware, no parámetros del perfil** — mantener el formulario del dashboard sin campos adicionales era parte del criterio de diseño; se revisan si la calibración con datos reales de Totem muestra que son demasiado (o muy poco) agresivos.
 
-🔴 **Pendiente (OI-IRR-02, alcance reducido):** la forma exacta de `f(VPD)` y los valores de `g(Li)` (tabla de rangos vs. coeficiente lineal, y sus parámetros concretos) — pendiente de calibración, no de decisión de enfoque.
+**Por qué es simulable hoy sin el sensor de luz definitivo:** la fórmula no le exige nada especial a `Li` — el firmware ya publica y consume un valor de luz (simulado en `firmware/simulator`, LDR sin calibrar en `firmware/genesis`). Mientras `Li` llegue en la misma unidad (µmol/m²/s) que `light_min`/`light_max` del perfil, `g(Li)` funciona igual de bien con datos simulados que con el sensor real — el reemplazo de hardware, cuando llegue, no cambia esta fórmula, solo mejora la fidelidad de `Li`.
 
 ---
 
@@ -81,8 +90,9 @@ duración_riego = duración_base(perfil) × f(VPD) × g(Li)
 ## Versatilidad por cultivo
 
 El Perfil de Cultivo Activo suministra, por especie y etapa de crecimiento:
-- Umbral de VPD que dispara riego (kPa)
-- Parámetros de `f(VPD)` y `g(Li)` (o su forma tabular)
+- Umbral de VPD que dispara riego (kPa) — también es la referencia que usa `f(VPD)`
+- Duración base del ciclo (`base_duration_s`)
+- Rango ideal de luz (`light_min`/`light_max`) — también es la referencia que usa `g(Li)`, sin parámetros adicionales
 
 Al no depender de un modelo ML entrenado, la versatilidad por cultivo deja de requerir "modelo único vs. modelos por cultivo vs. híbrido" (OI-IRR-04 original) — es simplemente un conjunto de parámetros numéricos por perfil, igual que los rangos ambientales ideales que el sistema ya maneja. Esto resuelve OI-IRR-04.
 
@@ -92,8 +102,8 @@ Al no depender de un modelo ML entrenado, la versatilidad por cultivo deja de re
 
 | ID | Ítem | Notas |
 |---|---|---|
-| OI-IRR-02 | Forma exacta de `f(VPD)` y `g(Li)` | Alcance reducido a calibración de parámetros, no a selección de algoritmo — ver sección "Cálculo" arriba |
 | OI-IRR-03 | Umbral de VPD por cultivo/etapa | Lo proveerá el Perfil de Cultivo Activo — pendiente de valores concretos por especie (0.5–0.8 kPa como referencia general de literatura CEA, a afinar por especie) |
+| ~~OI-IRR-02~~ | ~~Forma exacta de `f(VPD)` y `g(Li)`~~ | **Resuelto (11 jul 2026):** fórmulas cerradas en la sección "Cálculo" arriba, sin parámetros nuevos en el perfil |
 | ~~OI-IRR-01~~ | ~~Selección de algoritmo ML para estimación de Pn~~ | **Resuelto (10 jul 2026):** no aplica — VPD es fórmula cerrada, sin algoritmo que entrenar |
 | ~~OI-IRR-04~~ | ~~Estrategia de versatilidad por cultivo~~ | **Resuelto (10 jul 2026):** parámetros numéricos por perfil, sin necesidad de modelo(s) ML |
 | ~~OI-IRR-05~~ | ~~Fuente de datos de entrenamiento~~ | **Resuelto (10 jul 2026):** no aplica al modelo base (VPD); solo sería relevante si en el futuro se sofistica `g(Li)` con ML |

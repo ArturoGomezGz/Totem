@@ -16,9 +16,10 @@ Cada unidad Totem tiene un perfil activo asignado en todo momento. El perfil pue
 
 ### Duración del ciclo de riego
 
-- La duración **no es un valor fijo** — se calcula dinámicamente como `duración_base × f(VPD) × g(Li)`
-- Principio general: un VPD más alto (mayor demanda evaporativa) implica un ciclo de riego más largo; mayor intensidad lumínica también lo alarga (modulador simple, sin ML en el MVP — ver `modulo-decision.md`)
-- 🔴 **Pendiente (alcance reducido):** los parámetros concretos de `f(VPD)` y `g(Li)` (función lineal, tabla de rangos discretos, u otra) — pendiente de calibración, no de selección de enfoque. Ver `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
+**Decisión — 11 jul 2026:** la duración **no es un valor fijo** — se calcula dinámicamente como `base_duration_s × f(VPD) × g(Li)`, con fórmulas cerradas (ver `modulo-decision.md` § "Duración del ciclo"). Un VPD más alto (mayor demanda evaporativa) implica un ciclo más largo; más luz que el punto medio del rango ideal del perfil también lo alarga.
+
+- **Duración base** (`base_duration_s`) — duración del ciclo cuando VPD está justo en el umbral y Li está en el punto medio del rango ideal (sin modulación, `f=g=1.0`).
+- `f(VPD)` y `g(Li)` **no agregan parámetros nuevos al perfil** — reutilizan el umbral de VPD y el rango `light_min`/`light_max` que el perfil ya define. Los topes de la fórmula (1.0–2.0 y 0.5–1.5) son constantes del firmware, no configurables por perfil.
 
 ### Rangos ideales de variables ambientales
 
@@ -50,9 +51,8 @@ CO₂ fue evaluado y descartado del conjunto de sensores (10 jul 2026) — ya no
 
 ## Pendientes de definir
 
-- **Parámetros de `f(VPD)` y `g(Li)`** — bloqueante para la implementación completa del Módulo de Decisión de Riego, aunque el enfoque ya está decidido (VPD + modulador de luz, sin ML)
-- **Valores de referencia por especie** — umbral de VPD concreto para las especies contempladas (lechuga, albahaca, cilantro, etc.), partiendo de la referencia general de literatura CEA (0.5–0.8 kPa)
-- **Unidad de Li** — lux vs. µmol/m²/s — depende del sensor seleccionado (sensor actual del prototipo aún no validado)
+- **Valores de referencia por especie** — umbral de VPD y duración base concretos para las especies contempladas (lechuga, albahaca, cilantro, etc.), partiendo de la referencia general de literatura CEA (0.5–0.8 kPa)
+- **Unidad de Li** — lux vs. µmol/m²/s — depende del sensor seleccionado (sensor actual del prototipo aún no validado; mientras tanto, `g(Li)` funciona igual con Li simulado que con el sensor real)
 - **Validaciones de rango** — ¿puede el usuario ingresar cualquier valor, o hay límites para evitar configuraciones peligrosas?
 - **Perfil por defecto (factory state)** — ¿qué hace el ESP32 si arranca por primera vez sin haber recibido nunca un perfil? ¿Valores conservadores hardcodeados, o espera conexión antes de operar? Ver `docs/ecosistema/overview.md` — decisiones pendientes.
 
@@ -61,6 +61,6 @@ CO₂ fue evaluado y descartado del conjunto de sensores (10 jul 2026) — ya no
 ## Documentos relacionados
 
 - `docs/requirements.md` — FR-02, FR-03, FR-07, FR-09, FR-16, FR-17, FR-32
-- `docs/capa1/totem-principal/sistema-decision/modulo-decision.md` — el umbral de VPD y los parámetros de `f(VPD)`/`g(Li)` — decisión del 10 jul 2026
+- `docs/capa1/totem-principal/sistema-decision/modulo-decision.md` — el umbral de VPD y las fórmulas de `f(VPD)`/`g(Li)` — decisión del 11 jul 2026
 - `docs/ecosistema/overview.md` — el perfil vive en la DB de Capa 2 y se cachea en flash del ESP32
 - `docs/capa2/schema.md` — tabla `crop_profiles`
