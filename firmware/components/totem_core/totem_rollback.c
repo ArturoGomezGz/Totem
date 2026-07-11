@@ -49,5 +49,9 @@ void totem_rollback_confirm(void)
         esp_ota_mark_app_valid_cancel_rollback();
         pending_rollback_confirm = false;
         ESP_LOGI(TAG, "Firmware %s confirmado como valido - rollback cancelado", totem_firmware_version());
+        // Confirmación visual de que el OTA se aplicó de verdad — solo se
+        // dispara aquí (no en cada arranque normal), porque este bloque
+        // solo se ejecuta cuando había un rollback pendiente de verificar.
+        totem_status_led_pulse(5000);
     }
 }

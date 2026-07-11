@@ -81,6 +81,23 @@ duración_riego = base_duration_s(perfil) × f(VPD) × g(Li)
 
 ---
 
+## Cadencia del ciclo de decisión
+
+**Decisión — 11 jul 2026.** Cierra el pendiente "Intervalo del ciclo de decisión" de `docs/ecosistema/overview.md` (candidato original: 3 min). El argumento de ahorro de energía no sostenía por sí solo un intervalo tan largo — el radio WiFi/MQTT del ESP32 ya despierta cada 10s para publicar lecturas, así que evaluar la decisión con más frecuencia no cuesta energía extra significativa. La cadencia real terminó dependiendo del método, no de una sola constante:
+
+- **`fixed_timer` — `min_interval_s` es el periodo completo, inicio a inicio del riego, no un intervalo de chequeo aparte.** "Riega 4s cada minuto" se entiende como que el próximo riego empieza 60s después del anterior, no 60s después de que terminó — como un temporizador de jardín típico. El firmware duerme `min_interval_s − cycle_duration_s` entre riegos (el riego mismo ocupa el resto del periodo), de forma que el ciclo real completo da exactamente `min_interval_s`, no `min_interval_s + cycle_duration_s`.
+- **`vpd_threshold` — `min_interval_s` sigue siendo un enfriamiento *después* de terminar de regar** (evita re-disparo si VPD sigue sobre el umbral apenas termina un riego), no un periodo. El chequeo de VPD corre a una cadencia de housekeeping fija de **60s** — VPD cambia en escala de decenas de minutos (ciclo solar), así que revisar cada minuto no pierde nada agronómicamente significativo frente a revisar cada 3.
+
+**Por qué son conceptos distintos aunque compartan el nombre del campo:** `fixed_timer` es inherentemente periódico — no tiene sentido que "cada cuánto reviso" sea un número distinto de "cada cuánto riega". `vpd_threshold` es un detector de cruce de umbral, no un metrónomo — su `min_interval_s` es una salvaguarda anti-repetición, independiente de la frecuencia de muestreo de VPD.
+
+### Sincronización con cambios recibidos — el ciclo "empieza de 0"
+
+El firmware espera con una notificación de tarea (no un `delay` ciego), así que puede despertar antes de tiempo cuando algo cambia — un perfil nuevo asignado o editado, recibido por MQTT — en vez de esperar el resto de la cadencia en curso. El LED de estado (ver `firmware/NON-NEGOTIABLES.md` § 11) confirma visualmente el cambio con un pulso de 5s, y **justo en el instante en que se apaga** notifica al ciclo de decisión, que recalcula su próxima espera con el perfil ya vigente. El perfil se aplica en RAM de inmediato al recibirse (no espera el LED) — el LED y la sincronización del ciclo son sobre *cuándo se reinicia el reloj de la próxima decisión*, no sobre si el cambio ya está vigente.
+
+Esto resuelve, entre otros, el caso de un riego manual que termina justo antes de que tocara un ciclo automático: sin esta sincronización, el ciclo automático podía dispararse casi inmediatamente después; con ella, el reloj se reinicia limpiamente desde el evento más reciente.
+
+---
+
 ## Ubicación de cálculo
 
 **Decidido: en dispositivo** (22 jun 2026, reafirmado 10 jul 2026) — el cálculo corre en el ESP32. Con este enfoque ya **no es un modelo `.tflite`** sino aritmética directa (VPD) más un coeficiente simple (Li) — más liviano aún que la inferencia ML originalmente planeada, y reafirma con más margen el principio de que Capa 1 nunca depende del server (`CLAUDE.md`). Ver `docs/ecosistema/overview.md`.
@@ -103,11 +120,13 @@ Al no depender de un modelo ML entrenado, la versatilidad por cultivo deja de re
 | ID | Ítem | Notas |
 |---|---|---|
 | OI-IRR-03 | Umbral de VPD por cultivo/etapa | Lo proveerá el Perfil de Cultivo Activo — pendiente de valores concretos por especie (0.5–0.8 kPa como referencia general de literatura CEA, a afinar por especie) |
+| OI-IRR-07 | Predicción de VPD para programar el riego exacto en vez de sondear periódicamente | Explorado el 11 jul 2026 — factible con extrapolación lineal de T/RH en ventana corta, pero riesgo de peor caso no acotado si el modelo se equivoca (a diferencia del sondeo periódico). Recomendado: intervalo adaptativo con techo máximo, no predicción pura. Queda como mejora futura, no bloqueante — requiere datos de campo para calibrar antes de confiar en él |
 | ~~OI-IRR-02~~ | ~~Forma exacta de `f(VPD)` y `g(Li)`~~ | **Resuelto (11 jul 2026):** fórmulas cerradas en la sección "Cálculo" arriba, sin parámetros nuevos en el perfil |
 | ~~OI-IRR-01~~ | ~~Selección de algoritmo ML para estimación de Pn~~ | **Resuelto (10 jul 2026):** no aplica — VPD es fórmula cerrada, sin algoritmo que entrenar |
 | ~~OI-IRR-04~~ | ~~Estrategia de versatilidad por cultivo~~ | **Resuelto (10 jul 2026):** parámetros numéricos por perfil, sin necesidad de modelo(s) ML |
 | ~~OI-IRR-05~~ | ~~Fuente de datos de entrenamiento~~ | **Resuelto (10 jul 2026):** no aplica al modelo base (VPD); solo sería relevante si en el futuro se sofistica `g(Li)` con ML |
 | ~~OI-IRR-06~~ | ~~Ubicación de la inferencia~~ | **Decidido: en dispositivo (22 jun 2026, reafirmado 10 jul 2026)** |
+| ~~OI-IRR-08~~ | ~~Intervalo del ciclo de decisión~~ | **Resuelto (11 jul 2026):** ver sección "Cadencia del ciclo de decisión" arriba — depende del método, no es una sola constante |
 
 ---
 

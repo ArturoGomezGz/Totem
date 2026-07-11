@@ -6,8 +6,8 @@ correr en una unidad real y hablar con el server (`firmware/bootstrap`, `firmwar
 puntos, deja de ser compatible con el ciclo de vida OTA, con el panel de administración de
 firmware, o con el broker MQTT — no son detalles de estilo, son el contrato con el server.
 
-Implementación real: el esqueleto de WiFi/NVS/OTA/rollback vive en el componente compartido
-`firmware/components/totem_core` (ver nota al final). Todo firmware nuevo lo declara en su
+Implementación real: el esqueleto de WiFi/NVS/OTA/rollback/LED de estado vive en el componente
+compartido `firmware/components/totem_core` (ver nota al final). Todo firmware nuevo lo declara en su
 `REQUIRES` vía `EXTRA_COMPONENT_DIRS` — no lo duplica. `firmware/bootstrap/main/bootstrap.c` es
 la referencia más simple de cómo consumirlo (sin sensores); `firmware/genesis/main/genesis.c`
 muestra además cómo sumar un driver de sensor propio (`totem_dht11`) sin tocar el core.
@@ -209,7 +209,7 @@ interno del server) rechaza la conexión si no coinciden.
 ## 9. Qué NO es negociable vs. qué sí varía por proyecto
 
 No negociable (todo lo de arriba): NVS, particiones, sdkconfig, versión vía `version.txt`, OTA,
-rollback, topic `status`/`ota`.
+rollback, topic `status`/`ota`, LED de estado (sección 11).
 
 Sí varía libremente entre proyectos: qué sensores/actuadores existen, el contenido de
 `readings`/`alerts`/`commands`, el intervalo de publicación, y cualquier lógica de decisión de
@@ -217,7 +217,7 @@ riego o modelo de estimación (ver decisiones pendientes de ML en `docs/ecosiste
 
 ## 10. Componentes compartidos
 
-WiFi/NVS/OTA/rollback/versión/status viven en `firmware/components/totem_core` — un solo
+WiFi/NVS/OTA/rollback/versión/status/LED de estado viven en `firmware/components/totem_core` — un solo
 componente, no varios independientes, porque en la práctica siempre viajan juntos (la
 confirmación de rollback ocurre dentro del callback `MQTT_EVENT_CONNECTED`, que también publica
 `status`). Cualquier fix a esta lógica (ej. un bug de OTA) se corrige una sola vez en
@@ -236,3 +236,38 @@ set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
 y su `main/CMakeLists.txt` debe listar `totem_core` (siempre) y los drivers que aplique (ej.
 `totem_dht11`) en `REQUIRES`.
+
+## 11. LED de estado — confirmación visual de cambios recibidos
+
+**Decisión — 11 jul 2026.** Toda unidad debe poder mostrar, sin monitor serie, que acaba de
+recibir y aplicar un cambio (firmware nuevo, perfil de cultivo asignado o editado). Vive en
+`totem_core` porque usa el **LED RGB WS2812 integrado en GPIO8** de la placa ESP32-C6
+SuperMini — un recurso de la placa física compartido por todo firmware (`bootstrap`,
+`simulator`, `genesis`), no un periférico opcional por proyecto como los LEDs de bomba/válvula.
+
+Driver: `firmware/components/totem_core/totem_led.c`, sobre el componente gestionado
+`espressif/led_strip` (declarado en `totem_core/idf_component.yml`). API pública en
+`totem_core.h`: `totem_status_led_init/on/off/pulse/pulse_notify`.
+
+### Parte obligatoria para TODO firmware (vive dentro de `totem_core`, gratis para quien lo consuma)
+
+- **OTA:** `totem_status_led_on()` al iniciar la descarga/flasheo real (`totem_ota_handle_message`,
+  antes de lanzar `ota_task`), `totem_status_led_off()` en el camino de falla (`ota_fail`). En
+  éxito no hace falta apagarlo a mano — el reinicio corta la alimentación de la tarea.
+  **Importante:** el LED se queda encendido mientras dure la operación real (variable, segundos a
+  más de un minuto según tamaño del binario) — no es un pulso de tiempo fijo, porque un pulso fijo
+  mentiría apagándose antes de que el OTA termine de verdad.
+- **Rollback confirmado:** `totem_status_led_pulse(5000)` dentro de `totem_rollback_confirm()`,
+  solo cuando había un rollback pendiente de verificar (no en cada arranque normal) — confirma
+  visualmente "ya estoy vivo en la versión nueva" justo después de reconectar a MQTT.
+
+### Parte condicional — solo firmware con perfil de cultivo activo (ej. `genesis`)
+
+Al aplicar un perfil recibido por el topic `profile` (asignación o edición), el proyecto llama
+`totem_status_led_pulse_notify(5000, decision_task_handle)` **después** de aplicar el cambio en
+RAM — el cambio no espera al LED para tomar efecto, el LED es confirmación visual retrasada.
+`pulse_notify` además hace `xTaskNotifyGive()` sobre `decision_task_handle` en el instante exacto
+en que el LED se apaga, para que el ciclo de decisión automático "empiece de 0" desde ahí en vez
+de esperar el resto de su cadencia en curso. Ver
+`docs/capa1/totem-principal/sistema-decision/modulo-decision.md` para el detalle completo del
+mecanismo de timing.

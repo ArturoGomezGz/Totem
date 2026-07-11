@@ -68,9 +68,15 @@
 #define TEMP_ALERT      40.0f   // umbral que dispara alerta
 #define TEMP_SAFE       38.0f   // por debajo de aquí se resetea la alerta
 
-// Intervalo del ciclo de decisión automático — candidato documentado en
-// docs/ecosistema/overview.md ("Decisiones pendientes").
-#define DECISION_INTERVAL_MS (3 * 60 * 1000)
+// Cadencia de "housekeeping" del ciclo de decisión — aplica quiera cuando
+// no hay perfil activo, y a vpd_threshold (necesita muestrear VPD con
+// cierta frecuencia, independiente de min_interval_s que ahí es solo un
+// enfriamiento post-riego). fixed_timer NO usa esto — duerme su propio
+// periodo (ver fixed_timer_sleep_ms). Decisión — 11 jul 2026: se cierra el
+// pendiente de docs/ecosistema/overview.md en 60s; el argumento de ahorro
+// de energía para un intervalo más largo no sostenía por sí solo 3 min,
+// dado que el radio WiFi/MQTT ya despierta cada 10s para publicar lecturas.
+#define HOUSEKEEPING_INTERVAL_MS (60 * 1000)
 
 // Namespace/clave NVS donde se cachea el último perfil recibido (crudo, tal
 // cual llega por MQTT) — ver docs/transversal/crop-profile.md: el ESP32
@@ -130,6 +136,11 @@ typedef struct {
 } crop_profile_t;
 
 static crop_profile_t active_profile = { .loaded = false };
+
+// Capturado al crear irrigation_decision_task en app_main — se usa para
+// despertarla antes de tiempo cuando el LED de estado confirma un cambio
+// de perfil (ver totem_status_led_pulse_notify).
+static TaskHandle_t decision_task_handle = NULL;
 
 // Última lectura válida de T/RH — el ciclo de decisión no vuelve a leer el
 // sensor, reutiliza lo que ya publicó publish_readings_task en este ciclo.
@@ -510,6 +521,12 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
                 ESP_LOGI(TAG, "Perfil recibido: %.*s", event->data_len, event->data);
                 if (profile_parse(event->data, event->data_len)) {
                     profile_save_raw(event->data, event->data_len);
+                    // El perfil ya se aplicó en RAM (profile_parse) — el LED
+                    // solo confirma visualmente, y justo al apagarse (5s)
+                    // despierta el ciclo de decisión para que "empiece de 0"
+                    // en ese instante, no en el de recepción. Ver
+                    // docs/capa1/totem-principal/sistema-decision/modulo-decision.md.
+                    totem_status_led_pulse_notify(5000, decision_task_handle);
                 }
             } else {
                 ESP_LOGI(TAG, "Mensaje en [%s]: %.*s", topic, event->data_len, event->data);
@@ -600,18 +617,45 @@ static void publish_readings_task(void *pvParameters)
 // Ciclo de decisión automático — VPD (y timer fijo) + arbitraje con manual
 // ============================================================
 
+// Para fixed_timer, min_interval_s es el PERIODO completo inicio-a-inicio
+// (a diferencia de vpd_threshold, donde es un enfriamiento tras terminar) —
+// "riega 4s cada minuto" se entiende como que el próximo riego empieza 60s
+// después de que empezó el anterior, no 60s después de que terminó. Como el
+// riego mismo ocupa cycle_duration_s de ese periodo, lo que hay que dormir
+// antes del siguiente es el resto. Ver docs/.../modulo-decision.md.
+static uint32_t fixed_timer_sleep_ms(const crop_profile_t *p)
+{
+    float gap_s = p->min_interval_s - p->cycle_duration_s;
+    if (gap_s < 0.0f) {
+        gap_s = 0.0f;
+    }
+    return (uint32_t)(gap_s * 1000.0f);
+}
+
 static void irrigation_decision_task(void *pvParameters)
 {
     bool first_run = true;
 
     while (1) {
-        // Primera evaluación pronto tras el arranque (no hay que esperar los
-        // 3 min completos para la primera decisión) — solo el margen para
-        // que publish_readings_task ya haya hecho al menos una lectura de
-        // T/RH. Las siguientes vueltas del loop sí respetan el intervalo
-        // completo (incluidos los "continue" de abajo, que vuelven aquí).
-        vTaskDelay(pdMS_TO_TICKS(first_run ? 15000 : DECISION_INTERVAL_MS));
+        uint32_t sleep_ms;
+        if (first_run) {
+            // Primera evaluación pronto tras el arranque — solo el margen
+            // para que publish_readings_task ya haya hecho al menos una
+            // lectura de T/RH, no hay que esperar la cadencia completa.
+            sleep_ms = 15000;
+        } else if (active_profile.loaded && strcmp(active_profile.irrigation_method, "fixed_timer") == 0) {
+            sleep_ms = fixed_timer_sleep_ms(&active_profile);
+        } else {
+            sleep_ms = HOUSEKEEPING_INTERVAL_MS;
+        }
         first_run = false;
+
+        // Duerme hasta sleep_ms, o hasta que algo externo nos despierte
+        // antes (ver totem_status_led_pulse_notify en el handler del topic
+        // profile) — así un cambio recién aplicado no espera el resto del
+        // intervalo en curso; el ciclo "empieza de 0" en el instante real
+        // en que se notifica, no aproximado por la cadencia fija.
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(sleep_ms));
 
         if (totem_ota_in_progress()) {
             continue;
@@ -627,15 +671,6 @@ static void irrigation_decision_task(void *pvParameters)
             continue;
         }
 
-        if (has_watered_since_boot) {
-            int64_t elapsed_s = (esp_timer_get_time() - last_watering_end_us) / 1000000LL;
-            if (elapsed_s < (int64_t)active_profile.min_interval_s) {
-                ESP_LOGI(TAG, "Decisión automática: intervalo mínimo no cumplido (%llds/%.0fs)",
-                    (long long)elapsed_s, active_profile.min_interval_s);
-                continue;
-            }
-        }
-
         bool  should_water = false;
         float duration_s = 0.0f;
 
@@ -643,6 +678,18 @@ static void irrigation_decision_task(void *pvParameters)
             should_water = true;
             duration_s = active_profile.cycle_duration_s;
         } else if (strcmp(active_profile.irrigation_method, "vpd_threshold") == 0) {
+            // Acá min_interval_s SÍ es un enfriamiento tras terminar de
+            // regar (evita re-disparo si VPD sigue sobre el umbral apenas
+            // termina un riego) — distinto del uso en fixed_timer de arriba.
+            if (has_watered_since_boot) {
+                int64_t elapsed_s = (esp_timer_get_time() - last_watering_end_us) / 1000000LL;
+                if (elapsed_s < (int64_t)active_profile.min_interval_s) {
+                    ESP_LOGI(TAG, "Decisión automática: intervalo mínimo no cumplido (%llds/%.0fs)",
+                        (long long)elapsed_s, active_profile.min_interval_s);
+                    continue;
+                }
+            }
+
             if (isnan(last_temperature) || isnan(last_humidity)) {
                 ESP_LOGI(TAG, "Decisión automática: sin lectura de T/RH todavía");
                 continue;
@@ -724,6 +771,7 @@ void app_main(void)
     pump_led_init();
     ldr_init();
     supply_module_init();
+    totem_status_led_init();
 
     // Perfil cacheado en NVS de un arranque anterior — se carga antes de
     // conectar WiFi para poder decidir riego aunque la unidad arranque
@@ -746,5 +794,5 @@ void app_main(void)
 
     xTaskCreate(publish_readings_task, "readings", 4096, NULL, 5, NULL);
     xTaskCreate(irrigation_supply_task, "supply", 2048, NULL, 5, NULL);
-    xTaskCreate(irrigation_decision_task, "decision", 4096, NULL, 5, NULL);
+    xTaskCreate(irrigation_decision_task, "decision", 4096, NULL, 5, &decision_task_handle);
 }

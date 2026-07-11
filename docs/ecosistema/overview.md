@@ -95,8 +95,8 @@ Stack deployment-agnostic. La misma codebase corre en Raspberry Pi, VPS o cloud 
 
 Estas preguntas bloquean la implementación del firmware:
 
-- **Intervalo del ciclo de decisión** — ¿Cada cuánto corre el ciclo completo (lectura de sensores + inferencia ML + decisión de riego)? Candidato: 3 min.
-- **Intervalo de publicación MQTT** — ¿El ciclo de telemetría coincide con el de decisión o son independientes? Candidato: mismo intervalo (3 min); eventos críticos siempre inmediatos.
+- ~~**Intervalo del ciclo de decisión**~~ — **Resuelto (11 jul 2026):** ya no es una sola constante. Depende del método activo — ver `capa1/totem-principal/sistema-decision/modulo-decision.md` § "Cadencia del ciclo de decisión". `fixed_timer` usa su propio `min_interval_s` como periodo; `vpd_threshold` usa una cadencia de housekeeping fija de 60s (bajada de los 3 min candidato original — el ahorro de energía no lo sostenía, dado que el radio ya despierta cada 10s para lecturas).
+- ~~**Intervalo de publicación MQTT**~~ — **Resuelto:** independiente del ciclo de decisión, no coincide con él. `publish_readings_task` publica cada 10s de forma fija, sin importar la cadencia de decisión de riego.
 - **Aprovisionamiento de unidades** — ¿Cómo obtienen el ESP32 su `unit_id` y API key iniciales? ¿Provisioning manual via dashboard? ¿Cómo llegan las credenciales al dispositivo (serial, BLE, config file)?
 - **Política del buffer offline** — Tamaño en flash, política de descarte (FIFO vs. drop-newest), orden de reenvío al reconectar.
 - **Confirmación de ejecución de comandos** — El ESP32 recibe el comando via MQTT (QoS 1 garantiza entrega), pero ¿reporta el resultado de ejecución? Si `pump_on` falla, ¿publica una alerta o un ACK de fallo?

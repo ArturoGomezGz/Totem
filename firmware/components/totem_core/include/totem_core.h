@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include "esp_err.h"
 #include "mqtt_client.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 // Credenciales y datos de identidad cargados desde NVS (namespace "config").
 typedef struct {
@@ -48,3 +50,30 @@ bool totem_ota_in_progress(void);
 // Procesa un mensaje recibido en el topic "ota" ({"url","sha256","version"})
 // y, si es válido, lanza la tarea de descarga/verificación/aplicación.
 void totem_ota_handle_message(const char *data, int data_len);
+
+// ============================================================
+// LED de estado — RGB WS2812 integrado en GPIO8 (ESP32-C6 SuperMini)
+// ============================================================
+// Ver docs/capa1/totem-principal/sistema-decision/modulo-decision.md y
+// firmware/NON-NEGOTIABLES.md § LED de estado. Vive en totem_core porque
+// GPIO8 es un recurso de la placa física, no un periférico opcional por
+// proyecto — a diferencia de los LEDs de bomba/válvula de `genesis`.
+
+// Debe llamarse una vez en app_main antes de cualquier otro uso.
+void totem_status_led_init(void);
+
+// Encendido/apagado fijo, para operaciones de duración variable (ej. OTA:
+// encendido mientras dura la descarga/flasheo real, no un tiempo fijo).
+void totem_status_led_on(void);
+void totem_status_led_off(void);
+
+// Encendido por `ms`, luego apagado — no bloquea al llamador (corre en una
+// tarea propia). Usado para confirmaciones puntuales de duración fija.
+void totem_status_led_pulse(int ms);
+
+// Igual que totem_status_led_pulse, pero además hace xTaskNotifyGive()
+// sobre `task_to_notify` justo en el instante en que el LED se apaga — así
+// el llamador puede sincronizar algo (ej. "el ciclo de decisión empieza de
+// 0") con ese instante exacto en vez de con el momento en que se recibió
+// el cambio. `task_to_notify` puede ser NULL (equivalente a pulse simple).
+void totem_status_led_pulse_notify(int ms, TaskHandle_t task_to_notify);

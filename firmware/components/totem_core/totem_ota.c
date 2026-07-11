@@ -152,6 +152,7 @@ static void ota_task(void *pvParameters)
 
 ota_fail:
     ESP_LOGE(TAG, "OTA: falló — el dispositivo sigue en la versión actual");
+    totem_status_led_off();
     free(params);
     ota_in_progress = false;
     vTaskDelete(NULL);
@@ -197,5 +198,10 @@ void totem_ota_handle_message(const char *data, int data_len)
     cJSON_Delete(json);
 
     ota_in_progress = true;
+    // Encendido fijo mientras dura la descarga/flasheo real (duración
+    // variable, no un pulso de tiempo fijo) — se apaga en ota_fail si algo
+    // sale mal; en éxito, el reinicio corta la alimentación de la tarea y
+    // el LED se apaga con él.
+    totem_status_led_on();
     xTaskCreate(ota_task, "ota_task", 8192, params, 5, NULL);
 }

@@ -1,4 +1,4 @@
-# Firmware genesis (1.2.x) — riego autónomo por VPD
+# Firmware genesis (1.3.x) — riego autónomo por VPD + LED de estado
 
 Primera línea de firmware Totem que lee un sensor físico y controla un actuador físico, en vez
 de simular ambos como `firmware/simulator` (línea `1.0.x`). Corre en el mismo ESP32-C6 que ya
@@ -9,7 +9,7 @@ con el server.
 
 ## Qué cambia respecto a `firmware/simulator`
 
-| | `simulator` (1.0.x) | `genesis` (1.1.x) |
+| | `simulator` (1.0.x) | `genesis` (1.3.x) |
 |---|---|---|
 | Temperatura/humedad | Modelo simulado (`esp_random`) | Lectura real de un sensor **RQ-S003** (módulo REXQualis basado en DHT11) |
 | Luz | Simulada | Lectura real de un **fotoresistor (LDR)** — valor crudo de ADC (0-4095), solo para testing. No es confiable todavía; pendiente de reemplazo por un sensor más preciso (ver decisión del 10 jul 2026 en `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`) |
@@ -22,17 +22,15 @@ con el server.
 Los topics MQTT, el payload de `readings`, el flujo de comandos, OTA,
 rollback y reporte de versión son exactamente los mismos que en `simulator`.
 
-## Riego autónomo por VPD (1.2.0)
+## Riego autónomo por VPD (1.2.0, timing revisado en 1.3.0)
 
-Antes de esta versión, `genesis` solo regaba por comando manual (`pump_on`/`pump_off`) —
-el perfil recibido por MQTT se logueaba y se descartaba. A partir de 1.2.0:
+Antes de la 1.2.0, `genesis` solo regaba por comando manual (`pump_on`/`pump_off`) — el perfil
+recibido por MQTT se logueaba y se descartaba. A partir de 1.2.0:
 
 1. **El perfil se parsea y se cachea en NVS** (namespace `profile`, clave `json`) — se carga
    al arrancar, antes de conectar WiFi, así la unidad puede decidir riego con el último
    perfil conocido aunque arranque offline (ver `docs/transversal/crop-profile.md`).
-2. **Una tarea nueva (`irrigation_decision_task`) corre cada 3 minutos** (`DECISION_INTERVAL_MS`,
-   candidato documentado en `docs/ecosistema/overview.md`) y decide si regar según
-   `irrigation_method` del perfil activo:
+2. **`irrigation_decision_task` decide si regar** según `irrigation_method` del perfil activo:
    - `fixed_timer` — riega `cycle_duration_s` cada vez que se cumple el ciclo.
    - `vpd_threshold` — calcula VPD con la ecuación de Tetens sobre la última lectura de
      T/RH; si `VPD ≥ threshold_vpd_kpa`, riega `base_duration_s × f(VPD) × g(Li)`. Ver las
@@ -40,10 +38,38 @@ el perfil recibido por MQTT se logueaba y se descartaba. A partir de 1.2.0:
      `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
 3. **Arbitraje manual vs. automático.** Un comando `pump_on` manual siempre toma el control,
    incluso si había un riego automático en curso — lo interrumpe de inmediato en vez de
-   competir por la bomba. Un `pump_off` (manual o automático) sella `last_watering_end_us`;
-   el ciclo automático nunca vuelve a regar antes de que pase `min_interval_s` desde ahí,
-   sin importar quién disparó el riego anterior. Esto evita el caso donde un riego manual
-   termina justo antes de que tocara un ciclo automático y este se dispara casi de inmediato.
+   competir por la bomba. Un `pump_off` (manual o automático) sella `last_watering_end_us`.
+
+### Cadencia de decisión (revisado 1.3.0) — distinta según el método
+
+`fixed_timer` y `vpd_threshold` usan `min_interval_s` con **significados distintos**, y por
+lo tanto cadencias de chequeo distintas:
+
+- **`fixed_timer` — `min_interval_s` es el periodo completo inicio-a-inicio.** "Riega 4s cada
+  minuto" se entiende como que el próximo riego *empieza* 60s después del anterior, no 60s
+  después de que terminó — como un temporizador de jardín típico. `fixed_timer_sleep_ms()`
+  duerme `min_interval_s − cycle_duration_s` (el riego mismo ocupa el resto del periodo), así
+  que el ciclo real completo da exactamente `min_interval_s` segundos, no
+  `min_interval_s + cycle_duration_s`.
+- **`vpd_threshold` — `min_interval_s` es un enfriamiento *después* de terminar de regar**, no
+  un periodo — evita que se dispare de nuevo casi inmediatamente si VPD sigue sobre el umbral
+  apenas termina un riego (ruido de sensor, o la planta aún no "absorbió" el riego anterior).
+  Fuera de eso, el chequeo corre a la cadencia fija de housekeeping (`HOUSEKEEPING_INTERVAL_MS`,
+  60s — bajado de los 3 min originales de la 1.2.0: el argumento de ahorro de energía no
+  sostenía 3 min, dado que el radio WiFi/MQTT ya despierta cada 10s para publicar lecturas).
+
+### El ciclo automático "empieza de 0" en el instante exacto en que se aplica un cambio
+
+`irrigation_decision_task` espera con `ulTaskNotifyTake()` en vez de `vTaskDelay()` ciego —
+puede despertar antes de tiempo si algo la notifica. El handler del topic `profile` aplica el
+perfil de inmediato en RAM (no espera al LED) y llama
+`totem_status_led_pulse_notify(5000, decision_task_handle)`: el LED confirma visualmente el
+cambio, y **justo al apagarse** (5s después) notifica a la tarea de decisión — ese es el
+instante en que el ciclo recalcula su próxima cadencia con el perfil ya vigente. Así, un riego
+manual que termina segundos antes de que tocara un ciclo automático no lo dispara casi de
+inmediato, y un cambio de perfil no espera el resto del intervalo en curso. Ver sección "LED de
+estado" en `firmware/NON-NEGOTIABLES.md` y la discusión completa en
+`docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
 
 **Luz simulada para `g(Li)`, no el LDR real.** El fotoresistor de este firmware da conteos
 crudos de ADC (0–4095), no µmol/m²/s — no es comparable contra `light_min`/`light_max` del
@@ -125,7 +151,9 @@ Asignación usada en este firmware (ver `main/genesis.c`):
 | LED cátodo (vía resistencia) | GND |
 | Flotador (otra pata) | GND |
 
-GPIO8 y GPIO9 quedan reservados (RGB y BOOT integrados) — no usar para periféricos externos.
+GPIO8 (LED RGB WS2812 integrado) ya no está solo "reservado" — desde 1.3.0 lo maneja
+`totem_core` como LED de estado (ver `firmware/NON-NEGOTIABLES.md` § 11). GPIO9 (botón BOOT)
+sigue reservado — no usar ninguno de los dos para periféricos externos nuevos.
 
 ### Conexión del flotador y la válvula NC (LED)
 
@@ -217,7 +245,7 @@ normalidad durante la espera.
 ## Publicar como release
 
 Igual que con `simulator` — subir el `.bin` compilado al endpoint `POST /api/v1/firmware`. La
-versión se lee del binario (`version.txt` → `1.2.0`), no se escribe a mano. Al publicar el
+versión se lee del binario (`version.txt` → `1.3.0`), no se escribe a mano. Al publicar el
 release, marca `vpd_threshold` (y `fixed_timer`) en `supported_irrigation_methods` — ver
 `docs/capa1/totem-principal/sistema-decision/modulo-decision.md` y el flujo de publicación en
 `frontend/src/pages/Firmware.jsx`.

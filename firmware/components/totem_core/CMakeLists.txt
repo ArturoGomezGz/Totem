@@ -4,6 +4,7 @@ idf_component_register(SRCS
                         "totem_ota.c"
                         "totem_rollback.c"
                         "totem_status.c"
+                        "totem_led.c"
                     INCLUDE_DIRS "include"
                     REQUIRES
                         app_update
@@ -12,4 +13,5 @@ idf_component_register(SRCS
                         json
                         mbedtls
                         mqtt
-                        nvs_flash)
+                        nvs_flash
+                        led_strip)
