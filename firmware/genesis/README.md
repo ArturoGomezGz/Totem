@@ -1,4 +1,4 @@
-# Firmware genesis (1.1.x) — primer firmware con sensor real
+# Firmware genesis (1.2.x) — riego autónomo por VPD
 
 Primera línea de firmware Totem que lee un sensor físico y controla un actuador físico, en vez
 de simular ambos como `firmware/simulator` (línea `1.0.x`). Corre en el mismo ESP32-C6 que ya
@@ -21,6 +21,36 @@ con el server.
 
 Los topics MQTT, el payload de `readings`, el flujo de comandos, OTA,
 rollback y reporte de versión son exactamente los mismos que en `simulator`.
+
+## Riego autónomo por VPD (1.2.0)
+
+Antes de esta versión, `genesis` solo regaba por comando manual (`pump_on`/`pump_off`) —
+el perfil recibido por MQTT se logueaba y se descartaba. A partir de 1.2.0:
+
+1. **El perfil se parsea y se cachea en NVS** (namespace `profile`, clave `json`) — se carga
+   al arrancar, antes de conectar WiFi, así la unidad puede decidir riego con el último
+   perfil conocido aunque arranque offline (ver `docs/transversal/crop-profile.md`).
+2. **Una tarea nueva (`irrigation_decision_task`) corre cada 3 minutos** (`DECISION_INTERVAL_MS`,
+   candidato documentado en `docs/ecosistema/overview.md`) y decide si regar según
+   `irrigation_method` del perfil activo:
+   - `fixed_timer` — riega `cycle_duration_s` cada vez que se cumple el ciclo.
+   - `vpd_threshold` — calcula VPD con la ecuación de Tetens sobre la última lectura de
+     T/RH; si `VPD ≥ threshold_vpd_kpa`, riega `base_duration_s × f(VPD) × g(Li)`. Ver las
+     fórmulas exactas de `f` y `g` en
+     `docs/capa1/totem-principal/sistema-decision/modulo-decision.md`.
+3. **Arbitraje manual vs. automático.** Un comando `pump_on` manual siempre toma el control,
+   incluso si había un riego automático en curso — lo interrumpe de inmediato en vez de
+   competir por la bomba. Un `pump_off` (manual o automático) sella `last_watering_end_us`;
+   el ciclo automático nunca vuelve a regar antes de que pase `min_interval_s` desde ahí,
+   sin importar quién disparó el riego anterior. Esto evita el caso donde un riego manual
+   termina justo antes de que tocara un ciclo automático y este se dispara casi de inmediato.
+
+**Luz simulada para `g(Li)`, no el LDR real.** El fotoresistor de este firmware da conteos
+crudos de ADC (0–4095), no µmol/m²/s — no es comparable contra `light_min`/`light_max` del
+perfil. Mientras no haya un sensor de luz calibrado, `g(Li)` usa un ciclo día/noche sintético
+de 10 minutos (`simulated_light_par()`), solo para poder probar el modulador de principio a
+fin. El LDR real se sigue publicando sin cambios en `readings.light` — no lo reemplaza, y
+cuando llegue el sensor definitivo solo hay que sustituir esa función.
 
 ### Fotoresistor — nota sobre el `light` crudo
 
@@ -187,4 +217,7 @@ normalidad durante la espera.
 ## Publicar como release
 
 Igual que con `simulator` — subir el `.bin` compilado al endpoint `POST /api/v1/firmware`. La
-versión se lee del binario (`version.txt` → `1.1.0`), no se escribe a mano.
+versión se lee del binario (`version.txt` → `1.2.0`), no se escribe a mano. Al publicar el
+release, marca `vpd_threshold` (y `fixed_timer`) en `supported_irrigation_methods` — ver
+`docs/capa1/totem-principal/sistema-decision/modulo-decision.md` y el flujo de publicación en
+`frontend/src/pages/Firmware.jsx`.

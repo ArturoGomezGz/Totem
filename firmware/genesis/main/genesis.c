@@ -9,12 +9,15 @@
 // WiFi/NVS/OTA/rollback vienen de firmware/components/totem_core — ver
 // firmware/NON-NEGOTIABLES.md para el contrato completo que cualquier
 // firmware nuevo debe respetar.
+#include <math.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "driver/gpio.h"
 #include "esp_adc/adc_oneshot.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
@@ -65,6 +68,17 @@
 #define TEMP_ALERT      40.0f   // umbral que dispara alerta
 #define TEMP_SAFE       38.0f   // por debajo de aquí se resetea la alerta
 
+// Intervalo del ciclo de decisión automático — candidato documentado en
+// docs/ecosistema/overview.md ("Decisiones pendientes").
+#define DECISION_INTERVAL_MS (3 * 60 * 1000)
+
+// Namespace/clave NVS donde se cachea el último perfil recibido (crudo, tal
+// cual llega por MQTT) — ver docs/transversal/crop-profile.md: el ESP32
+// siempre debe poder decidir con el último perfil conocido, incluso offline.
+#define PROFILE_NVS_NAMESPACE "profile"
+#define PROFILE_NVS_KEY       "json"
+#define PROFILE_JSON_MAX_LEN  512
+
 static const char *TAG = "genesis";
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 static volatile bool pump_on = false;
@@ -72,6 +86,47 @@ static volatile bool valve_open = false;
 static volatile bool watering_requested = false;
 static totem_config_t config;
 static adc_oneshot_unit_handle_t adc1_handle;
+
+// ============================================================
+// Módulo de Decisión de Riego — VPD (T, RH) + modulador de luz
+// ============================================================
+// Ver docs/capa1/totem-principal/sistema-decision/modulo-decision.md.
+// Nada de esto usa ML: VPD es fórmula cerrada (Tetens) y la duración es
+// aritmética simple sobre el perfil activo.
+
+typedef enum {
+    TRIGGER_NONE,        // nadie controla la bomba ahora mismo
+    TRIGGER_MANUAL,      // un comando pump_on/pump_off desde el dashboard tiene el control
+    TRIGGER_AUTONOMOUS,  // el ciclo de decisión automático tiene el control
+} water_trigger_t;
+
+static volatile water_trigger_t current_trigger = TRIGGER_NONE;
+
+// Sellado en la transición a SUPPLY_OFF (ver supply_state_set), sin importar
+// si el riego que acaba de terminar fue manual o automático. El ciclo de
+// decisión automático nunca dispara antes de que pase min_interval_s desde
+// aquí — así un riego manual reinicia la espera del siguiente automático en
+// vez de dejar que se disparen casi seguidos.
+static volatile int64_t last_watering_end_us = 0;
+
+typedef struct {
+    bool  loaded;
+    char  irrigation_method[32];
+    bool  has_light_range;
+    float light_min;
+    float light_max;
+    float threshold_vpd_kpa;  // vpd_threshold
+    float base_duration_s;    // vpd_threshold
+    float cycle_duration_s;   // fixed_timer
+    float min_interval_s;     // ambos métodos
+} crop_profile_t;
+
+static crop_profile_t active_profile = { .loaded = false };
+
+// Última lectura válida de T/RH — el ciclo de decisión no vuelve a leer el
+// sensor, reutiliza lo que ya publicó publish_readings_task en este ciclo.
+static volatile float last_temperature = NAN;
+static volatile float last_humidity = NAN;
 
 // Topics MQTT — construidos después de cargar unit_id desde NVS
 static char topic_readings[96];
@@ -171,6 +226,11 @@ static void supply_state_set(supply_state_t next)
             valve_set(false);
             pump_set(false);
             action = "pump_off";
+            // Sella el fin del riego sin importar el origen (manual o
+            // automático) — irrigation_decision_task usa esto para no
+            // volver a disparar antes de min_interval_s. Ver el enum
+            // water_trigger_t más arriba.
+            last_watering_end_us = esp_timer_get_time();
             ESP_LOGI(TAG, "Suministro: APAGADO — bomba y válvula cerradas");
             break;
     }
@@ -227,6 +287,144 @@ static int ldr_read_light(void)
 }
 
 // ============================================================
+// VPD (Déficit de Presión de Vapor) — ecuación de Tetens
+// ============================================================
+// SVP(T) = 0.6108 * exp(17.27*T / (T+237.3))  [kPa]
+// VPD    = SVP(T) * (1 - RH/100)              [kPa]
+
+static float vpd_calc_kpa(float temp_c, float humidity_pct)
+{
+    float svp = 0.6108f * expf(17.27f * temp_c / (temp_c + 237.3f));
+    return svp * (1.0f - humidity_pct / 100.0f);
+}
+
+// ============================================================
+// Luz simulada para g(Li) — ver decisión del 11 jul 2026 en
+// modulo-decision.md: el LDR de este firmware da conteos crudos de ADC, no
+// µmol/m²/s, así que no es comparable contra light_min/light_max del
+// perfil. Mientras no haya sensor calibrado, se simula un ciclo día/noche
+// corto (no depende de hora real — no hay NTP en este firmware) solo para
+// poder probar el modulador end-to-end. El LDR real se sigue publicando tal
+// cual en `readings.light`, sin tocar — esto NO lo reemplaza, solo
+// alimenta la fórmula internamente hasta que llegue el sensor definitivo.
+#define SIMULATED_LIGHT_CYCLE_US (10LL * 60 * 1000000)  // "día" sintético de 10 min
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846f
+#endif
+
+static float simulated_light_par(void)
+{
+    int64_t phase_us = esp_timer_get_time() % SIMULATED_LIGHT_CYCLE_US;
+    float phase = (float)phase_us / (float)SIMULATED_LIGHT_CYCLE_US;  // 0..1
+    float level = sinf(phase * (float)M_PI);                          // 0..1..0
+    if (level < 0.0f) level = 0.0f;
+    return level * 900.0f;  // rango PAR de referencia usado en firmware/simulator
+}
+
+// ============================================================
+// Perfil de Cultivo Activo — caché en flash (NVS) + parseo
+// ============================================================
+// Ver docs/transversal/crop-profile.md: la decisión de riego debe seguir
+// funcionando con el último perfil conocido aunque la unidad esté offline.
+
+static void profile_save_raw(const char *data, int data_len)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(PROFILE_NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Perfil: no se pudo abrir NVS para cachear (%s)", esp_err_to_name(err));
+        return;
+    }
+
+    char buf[PROFILE_JSON_MAX_LEN];
+    int len = data_len < (int)sizeof(buf) - 1 ? data_len : (int)sizeof(buf) - 1;
+    memcpy(buf, data, len);
+    buf[len] = '\0';
+
+    err = nvs_set_str(handle, PROFILE_NVS_KEY, buf);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Perfil: no se pudo escribir en NVS (%s)", esp_err_to_name(err));
+    }
+    nvs_close(handle);
+}
+
+// true si logró cargar un perfil cacheado en buf (deja buf null-terminado).
+static bool profile_load_raw(char *buf, size_t buf_size)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(PROFILE_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return false;  // namespace no existe todavía — unidad nunca recibió un perfil
+    }
+
+    size_t len = buf_size;
+    err = nvs_get_str(handle, PROFILE_NVS_KEY, buf, &len);
+    nvs_close(handle);
+    return err == ESP_OK;
+}
+
+// Parsea el perfil (mismo payload que publica routers/units.py assign_profile)
+// hacia active_profile. No valida contra irrigation_methods — el server ya
+// lo hizo antes de asignarlo; el firmware solo necesita los campos que usa.
+static bool profile_parse(const char *data, int data_len)
+{
+    cJSON *json = cJSON_ParseWithLength(data, data_len);
+    if (!json) {
+        ESP_LOGE(TAG, "Perfil: JSON inválido");
+        return false;
+    }
+
+    crop_profile_t next = { .loaded = true };
+
+    cJSON *method = cJSON_GetObjectItem(json, "irrigation_method");
+    if (cJSON_IsString(method)) {
+        strncpy(next.irrigation_method, method->valuestring, sizeof(next.irrigation_method) - 1);
+    }
+
+    cJSON *light_min = cJSON_GetObjectItem(json, "light_min");
+    cJSON *light_max = cJSON_GetObjectItem(json, "light_max");
+    if (cJSON_IsNumber(light_min) && cJSON_IsNumber(light_max)) {
+        next.has_light_range = true;
+        next.light_min = (float)light_min->valuedouble;
+        next.light_max = (float)light_max->valuedouble;
+    }
+
+    cJSON *params = cJSON_GetObjectItem(json, "irrigation_params");
+    if (cJSON_IsObject(params)) {
+        cJSON *v;
+        if ((v = cJSON_GetObjectItem(params, "threshold_vpd_kpa")) && cJSON_IsNumber(v)) {
+            next.threshold_vpd_kpa = (float)v->valuedouble;
+        }
+        if ((v = cJSON_GetObjectItem(params, "base_duration_s")) && cJSON_IsNumber(v)) {
+            next.base_duration_s = (float)v->valuedouble;
+        }
+        if ((v = cJSON_GetObjectItem(params, "cycle_duration_s")) && cJSON_IsNumber(v)) {
+            next.cycle_duration_s = (float)v->valuedouble;
+        }
+        if ((v = cJSON_GetObjectItem(params, "min_interval_s")) && cJSON_IsNumber(v)) {
+            next.min_interval_s = (float)v->valuedouble;
+        }
+    }
+
+    cJSON_Delete(json);
+
+    if (next.irrigation_method[0] == '\0') {
+        ESP_LOGW(TAG, "Perfil: sin irrigation_method, se ignora");
+        return false;
+    }
+
+    active_profile = next;
+    ESP_LOGI(TAG, "Perfil activo: método=%s umbral_vpd=%.2f duracion_base=%.0f duracion_fija=%.0f intervalo_min=%.0f",
+        active_profile.irrigation_method, active_profile.threshold_vpd_kpa,
+        active_profile.base_duration_s, active_profile.cycle_duration_s, active_profile.min_interval_s);
+    return true;
+}
+
+// ============================================================
 // Comandos
 // ============================================================
 
@@ -245,11 +443,16 @@ static void handle_command(const char *data, int data_len)
         // irrigation_supply_task, sea el origen del comando manual o
         // automático (ver modulo-suministro.md).
         if (strcmp(type->valuestring, "pump_on") == 0) {
+            // Manual siempre toma el control, incluso si el ciclo automático
+            // estaba regando — ver irrigation_decision_task, que aborta en
+            // cuanto detecta que current_trigger ya no es TRIGGER_AUTONOMOUS.
+            current_trigger = TRIGGER_MANUAL;
             watering_requested = true;
-            ESP_LOGI(TAG, "Riego solicitado — verificando flotador antes de arrancar la bomba");
+            ESP_LOGI(TAG, "Riego solicitado (manual) — verificando flotador antes de arrancar la bomba");
         } else if (strcmp(type->valuestring, "pump_off") == 0) {
+            current_trigger = TRIGGER_NONE;
             watering_requested = false;
-            ESP_LOGI(TAG, "Riego detenido por comando");
+            ESP_LOGI(TAG, "Riego detenido por comando manual");
         } else {
             ESP_LOGW(TAG, "Comando desconocido: %s", type->valuestring);
         }
@@ -296,6 +499,9 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
                 totem_ota_handle_message(event->data, event->data_len);
             } else if (strcmp(topic, topic_profile) == 0) {
                 ESP_LOGI(TAG, "Perfil recibido: %.*s", event->data_len, event->data);
+                if (profile_parse(event->data, event->data_len)) {
+                    profile_save_raw(event->data, event->data_len);
+                }
             } else {
                 ESP_LOGI(TAG, "Mensaje en [%s]: %.*s", topic, event->data_len, event->data);
             }
@@ -343,6 +549,9 @@ static void publish_readings_task(void *pvParameters)
                 ESP_LOGW(TAG, "DHT11: lectura fallida (%s) — se reintenta en el próximo ciclo",
                     esp_err_to_name(err));
             } else {
+                last_temperature = temperature;
+                last_humidity = humidity;
+
                 int light = ldr_read_light();
                 snprintf(payload, sizeof(payload),
                     "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%d}",
@@ -379,6 +588,101 @@ static void publish_readings_task(void *pvParameters)
 }
 
 // ============================================================
+// Ciclo de decisión automático — VPD (y timer fijo) + arbitraje con manual
+// ============================================================
+
+static void irrigation_decision_task(void *pvParameters)
+{
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(DECISION_INTERVAL_MS));
+
+        if (totem_ota_in_progress()) {
+            continue;
+        }
+        if (current_trigger != TRIGGER_NONE) {
+            // Hay control manual activo (o, por construcción, no debería
+            // haber otro ciclo automático corriendo a la vez) — no interferir.
+            ESP_LOGI(TAG, "Decisión automática: en pausa, hay riego manual activo");
+            continue;
+        }
+        if (!active_profile.loaded) {
+            ESP_LOGI(TAG, "Decisión automática: sin perfil activo, no se riega");
+            continue;
+        }
+
+        int64_t elapsed_s = (esp_timer_get_time() - last_watering_end_us) / 1000000LL;
+        if (elapsed_s < (int64_t)active_profile.min_interval_s) {
+            ESP_LOGI(TAG, "Decisión automática: intervalo mínimo no cumplido (%llds/%.0fs)",
+                (long long)elapsed_s, active_profile.min_interval_s);
+            continue;
+        }
+
+        bool  should_water = false;
+        float duration_s = 0.0f;
+
+        if (strcmp(active_profile.irrigation_method, "fixed_timer") == 0) {
+            should_water = true;
+            duration_s = active_profile.cycle_duration_s;
+        } else if (strcmp(active_profile.irrigation_method, "vpd_threshold") == 0) {
+            if (isnan(last_temperature) || isnan(last_humidity)) {
+                ESP_LOGI(TAG, "Decisión automática: sin lectura de T/RH todavía");
+                continue;
+            }
+            float vpd = vpd_calc_kpa(last_temperature, last_humidity);
+            if (vpd >= active_profile.threshold_vpd_kpa) {
+                float f = vpd / active_profile.threshold_vpd_kpa;
+                if (f > 2.0f) f = 2.0f;
+
+                float light_ref = active_profile.has_light_range
+                    ? (active_profile.light_min + active_profile.light_max) / 2.0f
+                    : 1.0f;
+                float li = active_profile.has_light_range ? simulated_light_par() : light_ref;
+                float g = (light_ref > 0.0f) ? (li / light_ref) : 1.0f;
+                if (g < 0.5f) g = 0.5f;
+                if (g > 1.5f) g = 1.5f;
+
+                should_water = true;
+                duration_s = active_profile.base_duration_s * f * g;
+                ESP_LOGI(TAG, "VPD=%.2f kPa (umbral %.2f) f=%.2f g=%.2f -> %.0fs",
+                    vpd, active_profile.threshold_vpd_kpa, f, g, duration_s);
+            } else {
+                ESP_LOGI(TAG, "VPD=%.2f kPa bajo el umbral %.2f — no se riega",
+                    vpd, active_profile.threshold_vpd_kpa);
+            }
+        } else {
+            ESP_LOGW(TAG, "Decisión automática: método desconocido '%s'", active_profile.irrigation_method);
+        }
+
+        if (!should_water || duration_s <= 0.0f) {
+            continue;
+        }
+
+        current_trigger = TRIGGER_AUTONOMOUS;
+        watering_requested = true;
+        ESP_LOGI(TAG, "Riego automático iniciado — duración calculada: %.0fs", duration_s);
+
+        // Sleep en pasos de 1s en vez de un solo vTaskDelay(duration_s): así,
+        // si llega un comando manual a mitad del ciclo, current_trigger deja
+        // de ser TRIGGER_AUTONOMOUS y esta tarea suelta el control de
+        // inmediato en vez de pelear con el comando manual al final.
+        bool interrupted = false;
+        for (int elapsed = 0; elapsed < (int)duration_s; elapsed++) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            if (current_trigger != TRIGGER_AUTONOMOUS) {
+                ESP_LOGI(TAG, "Riego automático interrumpido por control manual");
+                interrupted = true;
+                break;
+            }
+        }
+
+        if (!interrupted) {
+            watering_requested = false;
+            current_trigger = TRIGGER_NONE;
+        }
+    }
+}
+
+// ============================================================
 // Entry point
 // ============================================================
 
@@ -402,6 +706,20 @@ void app_main(void)
     ldr_init();
     supply_module_init();
 
+    // Perfil cacheado en NVS de un arranque anterior — se carga antes de
+    // conectar WiFi para poder decidir riego aunque la unidad arranque
+    // offline (docs/transversal/crop-profile.md). Si nunca se recibió un
+    // perfil, active_profile.loaded queda en false y el ciclo de decisión
+    // no riega hasta que llegue uno por MQTT.
+    char cached_profile[PROFILE_JSON_MAX_LEN];
+    if (profile_load_raw(cached_profile, sizeof(cached_profile))) {
+        if (profile_parse(cached_profile, (int)strlen(cached_profile))) {
+            ESP_LOGI(TAG, "Perfil cacheado en NVS cargado correctamente");
+        }
+    } else {
+        ESP_LOGI(TAG, "Sin perfil cacheado en NVS — esperando el primero por MQTT");
+    }
+
     totem_wifi_connect(&config);
     mqtt_init();
 
@@ -409,4 +727,5 @@ void app_main(void)
 
     xTaskCreate(publish_readings_task, "readings", 4096, NULL, 5, NULL);
     xTaskCreate(irrigation_supply_task, "supply", 2048, NULL, 5, NULL);
+    xTaskCreate(irrigation_decision_task, "decision", 4096, NULL, 5, NULL);
 }
