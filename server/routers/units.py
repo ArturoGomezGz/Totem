@@ -658,7 +658,11 @@ def assign_profile(
         db.add(TotemConfig(unit_id=unit_id, active_profile_id=body.profile_id))
     db.commit()
 
-    # Publicar el perfil completo al topic MQTT de la unidad
+    # Publicar el perfil completo al topic MQTT de la unidad, retenido: si el
+    # ESP32 no estaba conectado/suscrito en el instante exacto de publicar
+    # (ej. reconectando tras un OTA), el broker le entrega este mensaje en
+    # cuanto se suscriba — sin retain, ese perfil se perdería para siempre
+    # (QoS 1 no reenvía a una sesión que nunca llegó a suscribirse).
     mqtt_client.publish(
         f"totem/{unit_id}/profile",
         {
@@ -675,6 +679,7 @@ def assign_profile(
             "irrigation_method": profile.irrigation_method,
             "irrigation_params": profile.irrigation_params,
         },
+        retain=True,
     )
 
     return {"detail": "Perfil asignado"}

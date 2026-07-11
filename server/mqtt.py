@@ -34,8 +34,8 @@ class MQTTClient:
         self._client.loop_stop()
         self._client.disconnect()
 
-    def publish(self, topic: str, payload: dict) -> None:
-        self._client.publish(topic, json.dumps(payload), qos=1)
+    def publish(self, topic: str, payload: dict, retain: bool = False) -> None:
+        self._client.publish(topic, json.dumps(payload), qos=1, retain=retain)
 
     def _on_connect(self, client, userdata, flags, reason_code, properties) -> None:
         if reason_code.is_failure:

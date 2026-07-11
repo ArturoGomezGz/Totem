@@ -109,6 +109,14 @@ static volatile water_trigger_t current_trigger = TRIGGER_NONE;
 // vez de dejar que se disparen casi seguidos.
 static volatile int64_t last_watering_end_us = 0;
 
+// false hasta el primer riego real. Sin esto, min_interval_s se compararía
+// contra el tiempo de uptime desde el arranque (last_watering_end_us queda
+// en 0 hasta el primer pump_off) — un min_interval_s mayor al tiempo que
+// lleva encendida la unidad bloquearía el primer ciclo automático aunque
+// nunca se haya regado. "Nunca regué" debe permitir regar de inmediato, no
+// comportarse como "acabo de regar en el instante del arranque".
+static volatile bool has_watered_since_boot = false;
+
 typedef struct {
     bool  loaded;
     char  irrigation_method[32];
@@ -231,6 +239,7 @@ static void supply_state_set(supply_state_t next)
             // volver a disparar antes de min_interval_s. Ver el enum
             // water_trigger_t más arriba.
             last_watering_end_us = esp_timer_get_time();
+            has_watered_since_boot = true;
             ESP_LOGI(TAG, "Suministro: APAGADO — bomba y válvula cerradas");
             break;
     }
@@ -593,8 +602,16 @@ static void publish_readings_task(void *pvParameters)
 
 static void irrigation_decision_task(void *pvParameters)
 {
+    bool first_run = true;
+
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(DECISION_INTERVAL_MS));
+        // Primera evaluación pronto tras el arranque (no hay que esperar los
+        // 3 min completos para la primera decisión) — solo el margen para
+        // que publish_readings_task ya haya hecho al menos una lectura de
+        // T/RH. Las siguientes vueltas del loop sí respetan el intervalo
+        // completo (incluidos los "continue" de abajo, que vuelven aquí).
+        vTaskDelay(pdMS_TO_TICKS(first_run ? 15000 : DECISION_INTERVAL_MS));
+        first_run = false;
 
         if (totem_ota_in_progress()) {
             continue;
@@ -610,11 +627,13 @@ static void irrigation_decision_task(void *pvParameters)
             continue;
         }
 
-        int64_t elapsed_s = (esp_timer_get_time() - last_watering_end_us) / 1000000LL;
-        if (elapsed_s < (int64_t)active_profile.min_interval_s) {
-            ESP_LOGI(TAG, "Decisión automática: intervalo mínimo no cumplido (%llds/%.0fs)",
-                (long long)elapsed_s, active_profile.min_interval_s);
-            continue;
+        if (has_watered_since_boot) {
+            int64_t elapsed_s = (esp_timer_get_time() - last_watering_end_us) / 1000000LL;
+            if (elapsed_s < (int64_t)active_profile.min_interval_s) {
+                ESP_LOGI(TAG, "Decisión automática: intervalo mínimo no cumplido (%llds/%.0fs)",
+                    (long long)elapsed_s, active_profile.min_interval_s);
+                continue;
+            }
         }
 
         bool  should_water = false;
