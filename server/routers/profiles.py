@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from auth import get_current_user
 from db import get_db
 from models import CropProfile, IrrigationMethod, Membership, TotemConfig, Unit, User
+from mqtt import mqtt_client
 
 router = APIRouter(tags=["profiles"])
 
@@ -68,6 +69,29 @@ def _require_org_membership(organization_id: str, current_user: User, db: Sessio
     if not membership:
         raise HTTPException(status_code=403, detail="No perteneces a esta organización")
     return membership
+
+
+def _publish_profile_to_unit(unit_id, profile: CropProfile) -> None:
+    # Mismo payload/retain que assign_profile en routers/units.py — retenido
+    # para que una unidad reconectando (ej. tras un OTA) también lo reciba.
+    mqtt_client.publish(
+        f"totem/{unit_id}/profile",
+        {
+            "id": str(profile.id),
+            "organization_id": str(profile.organization_id),
+            "name": profile.name,
+            "species": profile.species,
+            "temp_min": profile.temp_min,
+            "temp_max": profile.temp_max,
+            "humidity_min": profile.humidity_min,
+            "humidity_max": profile.humidity_max,
+            "light_min": profile.light_min,
+            "light_max": profile.light_max,
+            "irrigation_method": profile.irrigation_method,
+            "irrigation_params": profile.irrigation_params,
+        },
+        retain=True,
+    )
 
 
 def validate_irrigation_method(irrigation_method: str, irrigation_params: dict, db: Session) -> None:
@@ -296,6 +320,13 @@ def update_profile(
 
     db.commit()
     db.refresh(profile)
+
+    # Re-publicar (retenido) a cada unidad que tenga este perfil activo —
+    # sin esto, editar un perfil ya asignado se queda solo en la DB hasta
+    # que alguien reasigne el perfil a mano. Ver docstring de este endpoint.
+    affected_units = db.query(TotemConfig).filter(TotemConfig.active_profile_id == profile.id).all()
+    for config in affected_units:
+        _publish_profile_to_unit(config.unit_id, profile)
 
     return CropProfileOut(
         id=str(profile.id),
