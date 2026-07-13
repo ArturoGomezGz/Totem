@@ -16,3 +16,6 @@ frontend/dist/
 # (wifi_pass, api_key) de una unidad física específica, nunca deben commitearse
 /nvs.bin
 /firmware/nvs.bin
+
+# Trabajo exploratorio / PoC — no forma parte del código versionado
+/scratch/
