@@ -74,6 +74,10 @@ class DeviceEventOut(BaseModel):
     timestamp: datetime
     type: str
     trigger: str
+    # Duración (s) del tramo que cierra el evento: pump_off = bombeo, valve_close
+    # = llenado. None en aperturas (pump_on/valve_open) y en eventos previos a
+    # firmware 1.4.2.
+    duration_s: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -571,6 +575,7 @@ def get_events(
             timestamp=e.timestamp,
             type=e.type,
             trigger=e.trigger,
+            duration_s=e.duration_s,
         )
         for e in events
     ]

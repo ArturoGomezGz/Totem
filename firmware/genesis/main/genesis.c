@@ -282,6 +282,11 @@ static float   target_pump_on_s = 0.0f;   // objetivo del ciclo automático
 static int64_t pumped_us_accum  = 0;      // us bombeados acumulados en el ciclo actual
 static int64_t pump_on_since_us = 0;      // instante de encendido (0 = bomba apagada)
 
+// Instante de apertura de la válvula NC (entrada a SUPPLY_SUPPLYING; 0 = cerrada).
+// Se usa para medir la duración exacta de cada tramo de llenado y adjuntarla al
+// evento de auditoría valve_close (ver set_supply). Análogo a pump_on_since_us.
+static int64_t valve_open_since_us = 0;
+
 // Cooldown: instante real del fin del último riego (sellado en la transición
 // a SUPPLY_OFF, dentro de esta misma tarea, sin lag de poller). El ciclo
 // automático vpd_threshold no vuelve a regar antes de min_interval_s desde
@@ -348,11 +353,25 @@ static void set_supply(supply_state_t next)
     }
 
     supply_state_t prev = supply_state;
+    int64_t now_us = esp_timer_get_time();
+
+    // Duración exacta (us) del tramo que se cierra en esta transición. Sirve
+    // para adjuntar duration_s a los eventos de auditoría pump_off/valve_close;
+    // el firmware es la fuente autoritativa porque mide con el reloj monótono,
+    // no con timestamps de recepción del server (ver docs/capa2/schema.md).
+    int64_t pump_seg_us  = 0;
+    int64_t valve_seg_us = 0;
 
     // Cierre de tramo de bombeo: si veníamos bombeando, suma lo acumulado.
     if (prev == SUPPLY_PUMP_ON && pump_on_since_us != 0) {
-        pumped_us_accum += esp_timer_get_time() - pump_on_since_us;
+        pump_seg_us = now_us - pump_on_since_us;
+        pumped_us_accum += pump_seg_us;
         pump_on_since_us = 0;
+    }
+    // Cierre de tramo de llenado: si veníamos abasteciendo, mide lo abierto.
+    if (prev == SUPPLY_SUPPLYING && valve_open_since_us != 0) {
+        valve_seg_us = now_us - valve_open_since_us;
+        valve_open_since_us = 0;
     }
 
     supply_state = next;
@@ -361,13 +380,14 @@ static void set_supply(supply_state_t next)
         case SUPPLY_SUPPLYING:
             valve_set(true);
             pump_set(false);
+            valve_open_since_us = now_us;
             ESP_LOGI(TAG, "Suministro: ABASTECIENDO — válvula NC abierta (LED en GPIO%d), "
                 "esperando flotador", VALVE_LED_GPIO);
             break;
         case SUPPLY_PUMP_ON:
             valve_set(false);
             pump_set(true);
-            pump_on_since_us = esp_timer_get_time();
+            pump_on_since_us = now_us;
             ESP_LOGI(TAG, "Suministro: BOMBA ENCENDIDA (LED en GPIO%d)", PUMP_LED_GPIO);
             break;
         case SUPPLY_OFF:
@@ -400,12 +420,20 @@ static void set_supply(supply_state_t next)
         cJSON *e = cJSON_CreateObject();
         cJSON_AddStringToObject(e, "type", p_next ? "pump_on" : "pump_off");
         cJSON_AddStringToObject(e, "trigger", trigger);
+        // Solo el cierre (pump_off) lleva la duración del tramo que termina.
+        if (!p_next) {
+            cJSON_AddNumberToObject(e, "duration_s", pump_seg_us / 1000000.0);
+        }
         cJSON_AddItemToArray(events, e);
     }
     if (v_prev != v_next) {
         cJSON *e = cJSON_CreateObject();
         cJSON_AddStringToObject(e, "type", v_next ? "valve_open" : "valve_close");
         cJSON_AddStringToObject(e, "trigger", trigger);
+        // Solo el cierre (valve_close) lleva la duración del llenado que termina.
+        if (!v_next) {
+            cJSON_AddNumberToObject(e, "duration_s", valve_seg_us / 1000000.0);
+        }
         cJSON_AddItemToArray(events, e);
     }
 

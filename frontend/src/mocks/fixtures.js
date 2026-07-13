@@ -157,10 +157,16 @@ export function seedAlerts() {
 
 export function seedEvents() {
   return [
-    { id: 'event-1', unit_id: 'unit-totem-1', timestamp: minutesAgo(5), type: 'pump_on',  trigger: 'autonomous' },
-    { id: 'event-2', unit_id: 'unit-totem-1', timestamp: minutesAgo(3), type: 'pump_off', trigger: 'autonomous' },
-    { id: 'event-3', unit_id: 'unit-totem-1', timestamp: hoursAgo(6),  type: 'pump_on',  trigger: 'manual' },
-    { id: 'event-4', unit_id: 'unit-totem-1', timestamp: hoursAgo(6),  type: 'pump_off', trigger: 'manual' },
+    // Riego en curso: válvula abierta llenando, aún sin cerrar.
+    { id: 'event-1', unit_id: 'unit-totem-1', timestamp: minutesAgo(1),   type: 'valve_open',  trigger: 'autonomous', duration_s: null },
+    // Ciclo autónomo completo: llenó 42.8 s y luego bombeó 28.3 s.
+    { id: 'event-2', unit_id: 'unit-totem-1', timestamp: minutesAgo(6),   type: 'valve_open',  trigger: 'autonomous', duration_s: null },
+    { id: 'event-3', unit_id: 'unit-totem-1', timestamp: minutesAgo(5),   type: 'valve_close', trigger: 'autonomous', duration_s: 42.8 },
+    { id: 'event-4', unit_id: 'unit-totem-1', timestamp: minutesAgo(5),   type: 'pump_on',     trigger: 'autonomous', duration_s: null },
+    { id: 'event-5', unit_id: 'unit-totem-1', timestamp: minutesAgo(3),   type: 'pump_off',    trigger: 'autonomous', duration_s: 28.3 },
+    // Ciclo manual sin fase de llenado: solo bombeó 63 s.
+    { id: 'event-6', unit_id: 'unit-totem-1', timestamp: minutesAgo(361), type: 'pump_on',     trigger: 'manual',     duration_s: null },
+    { id: 'event-7', unit_id: 'unit-totem-1', timestamp: minutesAgo(360), type: 'pump_off',    trigger: 'manual',     duration_s: 63.0 },
   ]
 }
 

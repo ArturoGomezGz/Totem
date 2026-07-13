@@ -166,8 +166,12 @@ export const mockApi = {
   sendCommand: async (unit_id, type) => {
     await delay(200)
     if (type === 'pump_off') {
+      // Deriva la duración del bombeo a partir del último pump_on de la unidad,
+      // igual que el firmware adjunta duration_s al evento de cierre.
+      const lastOn = store.events.find(e => e.unit_id === unit_id && e.type === 'pump_on')
+      const duration_s = lastOn ? (Date.now() - new Date(lastOn.timestamp).getTime()) / 1000 : null
       setLiveState(unit_id, { pump_state: 'off', last_seen: new Date().toISOString() })
-      store.events.unshift({ id: uid(), unit_id, timestamp: new Date().toISOString(), type, trigger: 'manual' })
+      store.events.unshift({ id: uid(), unit_id, timestamp: new Date().toISOString(), type, trigger: 'manual', duration_s })
       return { detail: 'Comando enviado' }
     }
 
@@ -197,7 +201,10 @@ export const mockApi = {
   },
   getEvents: async (unit_id, params = {}) => {
     await delay()
-    const rows = store.events.filter(e => e.unit_id === unit_id)
+    // Igual que el endpoint real (units.py): más reciente primero.
+    const rows = store.events
+      .filter(e => e.unit_id === unit_id)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
     const limit = params.limit ?? 200
     return rows.slice(0, limit)
   },

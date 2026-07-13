@@ -112,15 +112,16 @@ El `ALTER TABLE ADD COLUMN` en TimescaleDB no requiere migración compleja ni do
 
 ### `device_events`
 
-Registro unificado de actuadores. Duración de ciclos de bomba se calcula como diferencia entre `pump_off` y su `pump_on` anterior.
+Registro unificado de actuadores. Cada evento de cierre (`pump_off`, `valve_close`) trae `duration_s`: la duración exacta del tramo que termina, medida por el firmware con el reloj monótono del ESP32 (fuente autoritativa, robusta al buffer offline). El firmware ≥1.4.2 la reporta; los eventos de apertura (`pump_on`, `valve_open`) y los históricos previos la dejan en `NULL`. `pump_off.duration_s` = tiempo de bombeo del ciclo; `valve_close.duration_s` = tiempo de llenado.
 
 | Campo | Tipo | Notas |
 |---|---|---|
 | `id` | UUID PK | |
 | `unit_id` | UUID FK → units | |
-| `timestamp` | TIMESTAMPTZ NOT NULL | |
+| `timestamp` | TIMESTAMPTZ NOT NULL | Instante de recepción en el server |
 | `type` | VARCHAR NOT NULL | `pump_on`, `pump_off`, `valve_open`, `valve_close` |
 | `trigger` | VARCHAR NOT NULL | `autonomous` o `override` |
+| `duration_s` | FLOAT NULL | Solo en cierres: segundos del tramo (bombeo / llenado). `CHECK (>= 0)` |
 
 ### `crop_profiles`
 
@@ -289,6 +290,7 @@ El mismo patrón aplica también a `totem_configs.supply_tank_id → units`: la 
 | `units` | `CHECK (type IN (...))` | `totem`, `supply_tank` |
 | `device_events` | `CHECK (type IN (...))` | `pump_on`, `pump_off`, `valve_open`, `valve_close` |
 | `device_events` | `CHECK (trigger IN (...))` | `autonomous`, `override` |
+| `device_events` | `CHECK (duration_s IS NULL OR duration_s >= 0)` | Duración no negativa |
 | `commands` | `CHECK (type IN (...))` | los siete tipos definidos |
 | `alerts` | `CHECK (severity IN (...))` | `critical`, `warning` |
 | `crop_profiles` | `CHECK (temp_min <= temp_max)` etc. | rangos coherentes para cada variable (solo cuando ambos extremos están presentes) |

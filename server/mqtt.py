@@ -139,11 +139,17 @@ class MQTTClient:
                 if ev_type not in _VALID_EVENT_TYPES or trigger not in _VALID_EVENT_TRIGGERS:
                     print(f"[mqtt] evento descartado (type/trigger invalido): {ev}")
                     continue
+                # Duración del tramo (solo la traen los cierres pump_off/valve_close).
+                # La mide el firmware; se descarta un valor negativo o no numérico.
+                duration_s = ev.get("duration_s")
+                if not isinstance(duration_s, (int, float)) or duration_s < 0:
+                    duration_s = None
                 db.add(DeviceEvent(
                     unit_id=uuid.UUID(unit_id_str),
                     timestamp=now,
                     type=ev_type,
                     trigger=trigger,
+                    duration_s=duration_s,
                 ))
                 persisted += 1
 

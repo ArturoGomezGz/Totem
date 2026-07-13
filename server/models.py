@@ -113,6 +113,10 @@ class DeviceEvent(Base):
     timestamp: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)
     trigger: Mapped[str] = mapped_column(String, nullable=False)
+    # Duración (s) del tramo que cierra el evento: pump_off = tiempo bombeando,
+    # valve_close = tiempo de llenado. NULL en eventos de apertura y en históricos
+    # previos a firmware 1.4.2. La mide el firmware con precisión de microsegundos.
+    duration_s: Mapped[Optional[float]] = mapped_column(Float)
 
 
 class Command(Base):
