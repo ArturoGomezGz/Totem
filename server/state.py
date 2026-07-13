@@ -11,11 +11,24 @@ def update_readings(unit_id: str, payload: dict) -> None:
     _units[unit_id]["last_seen"] = datetime.now(timezone.utc).isoformat()
 
 
-# El firmware reporta 3 estados en totem/<unit_id>/events (ver
-# firmware/genesis/main/genesis.c, irrigation_supply_task): "pump_on" (bomba
-# regando), "supplying" (válvula NC abierta, esperando a que el flotador
-# suba antes de regar) y "pump_off" (todo apagado).
-_ACTION_TO_STATE = {"pump_on": "on", "supplying": "supplying", "pump_off": "off"}
+# Estado instantáneo del suministro que reportan los dispositivos en
+# totem/<unit_id>/events, para la vista en vivo (WebSocket). Es distinto de
+# los eventos de auditoría que se persisten en device_events (ver mqtt.py).
+#
+# firmware/genesis publica el estado en el campo "state" con los tokens de su
+# máquina de suministro: "pump_on" (bomba regando), "supplying" (válvula NC
+# abierta, esperando al flotador) y "off" (todo apagado).
+#
+# Se aceptan también los tokens de publicadores más viejos por compatibilidad:
+# firmware/simulator (ESP32) manda "pump_off" y el simulador Python "ON"/"OFF".
+_ACTION_TO_STATE = {
+    "pump_on": "on",
+    "supplying": "supplying",
+    "off": "off",
+    "pump_off": "off",
+    "ON": "on",
+    "OFF": "off",
+}
 
 
 def update_pump(unit_id: str, action: str) -> None:

@@ -14,7 +14,7 @@ La comunicación del sistema usa dos protocolos según el actor:
 | Topic | Descripción | QoS |
 |---|---|---|
 | `totem/{unit_id}/readings` | Lectura de sensores (T, RH, Li) | 1 |
-| `totem/{unit_id}/events` | Evento de bomba (ON/OFF, duración, trigger) | 1 |
+| `totem/{unit_id}/events` | Estado del suministro + eventos de auditoría de actuador (ver payload abajo) | 1 |
 | `totem/{unit_id}/alerts` | Alerta crítica (tanque bajo, sensor desconectado, fallo de bomba) | 1 |
 | `totem/{unit_id}/status` | `{"firmware_version": "x.y.z"}` — retenido, publicado en cada conexión MQTT (incluyendo el reinicio tras un OTA). El server lo persiste en `Unit.firmware_version` | 1 |
 
@@ -27,6 +27,29 @@ La comunicación del sistema usa dos protocolos según el actor:
 | `totem/{unit_id}/ota` | Notificación de nueva versión disponible (versión + URL de descarga + hash) | 1 |
 
 **QoS 1 (at-least-once):** el broker reintenta hasta recibir ACK del receptor — garantía de entrega suficiente para lecturas y comandos de Totem.
+
+#### Payload de `totem/{unit_id}/events`
+
+El dispositivo publica un mensaje por cada transición del suministro. El payload mezcla dos cosas con consumidores distintos:
+
+```json
+{
+  "state": "pump_on",
+  "events": [
+    {"type": "valve_close", "trigger": "autonomous"},
+    {"type": "pump_on",     "trigger": "autonomous"}
+  ]
+}
+```
+
+- **`state`** — estado instantáneo del suministro para la **vista en vivo** (WebSocket): `off`, `supplying` (válvula NC abierta esperando llenado) o `pump_on`. El server **no lo persiste**; solo actualiza el estado en memoria y lo retransmite.
+- **`events`** — 0..2 eventos de **auditoría de actuador** derivados de la transición. El server los persiste en `device_events` (ver `capa2/schema.md`). Una misma transición puede mover ambos actuadores (al empezar a bombear se cierra la válvula NC y se enciende la bomba), de ahí el arreglo.
+  - `type`: `pump_on`, `pump_off`, `valve_open`, `valve_close`
+  - `trigger`: `autonomous` (decisión automática por VPD/timer) u `override` (comando manual desde Capa 2)
+
+La **duración** de un ciclo de bomba no se transmite: se deriva en el server como diferencia entre un `pump_off` y su `pump_on` previo.
+
+Publicadores más viejos (`firmware/simulator`, simulador Python) mandan solo un campo `action` sin `events`; el server lo acepta para la vista en vivo, pero al no traer `events` no persiste auditoría.
 
 ### OTA — descarga de binario (HTTP)
 

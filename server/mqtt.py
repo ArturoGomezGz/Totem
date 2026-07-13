@@ -15,6 +15,12 @@ SUBSCRIPTIONS = [
     "totem/+/status",
 ]
 
+# Valores admitidos en device_events — reflejan los CHECK de la tabla (ver
+# docs/capa2/schema.md). Un evento con type/trigger fuera de estos conjuntos se
+# descarta antes de tocar la DB para no violar el constraint.
+_VALID_EVENT_TYPES = {"pump_on", "pump_off", "valve_open", "valve_close"}
+_VALID_EVENT_TRIGGERS = {"autonomous", "override"}
+
 
 class MQTTClient:
     def __init__(self) -> None:
@@ -70,11 +76,19 @@ class MQTTClient:
             unit_state = state.get_unit(unit_id)
             if unit_state:
                 manager.broadcast_sync(unit_id, {"type": "state", **unit_state})
-        elif kind == "events" and "action" in payload:
-            state.update_pump(unit_id, payload["action"])
-            unit_state = state.get_unit(unit_id)
-            if unit_state:
-                manager.broadcast_sync(unit_id, {"type": "state", **unit_state})
+        elif kind == "events":
+            # El payload trae dos cosas con consumidores distintos (ver
+            # firmware/genesis set_supply): el estado instantáneo para la vista
+            # en vivo ("state", o "action" en publicadores viejos) y el arreglo
+            # "events" de eventos de auditoría de actuador que se persisten en
+            # device_events.
+            live = payload.get("state") or payload.get("action")
+            if live:
+                state.update_pump(unit_id, live)
+                unit_state = state.get_unit(unit_id)
+                if unit_state:
+                    manager.broadcast_sync(unit_id, {"type": "state", **unit_state})
+            self._persist_events(unit_id, payload.get("events", []))
         elif kind == "alerts":
             self._persist_alert(unit_id, payload)
         elif kind == "status":
@@ -98,6 +112,48 @@ class MQTTClient:
         except Exception as e:
             db.rollback()
             print(f"[mqtt] error persistiendo lectura: {e}")
+        finally:
+            db.close()
+
+    def _persist_events(self, unit_id_str: str, events: list) -> None:
+        # Auditoría de riego: persiste cada evento de actuador en device_events.
+        # La duración de un ciclo de bomba se deriva luego como diferencia entre
+        # un pump_off y su pump_on previo (ver docs/capa2/schema.md).
+        if not events:
+            return
+
+        db = SessionLocal()
+        try:
+            unit = db.query(Unit).filter(Unit.id == unit_id_str).first()
+            if not unit:
+                print(f"[mqtt] evento de unidad desconocida: {unit_id_str}")
+                return
+
+            now = datetime.now(timezone.utc)
+            persisted = 0
+            for ev in events:
+                if not isinstance(ev, dict):
+                    continue
+                ev_type = ev.get("type")
+                trigger = ev.get("trigger")
+                if ev_type not in _VALID_EVENT_TYPES or trigger not in _VALID_EVENT_TRIGGERS:
+                    print(f"[mqtt] evento descartado (type/trigger invalido): {ev}")
+                    continue
+                db.add(DeviceEvent(
+                    unit_id=uuid.UUID(unit_id_str),
+                    timestamp=now,
+                    type=ev_type,
+                    trigger=trigger,
+                ))
+                persisted += 1
+
+            unit.last_seen = now
+            db.commit()
+            if persisted:
+                print(f"[mqtt] {persisted} evento(s) de actuador persistido(s) — unidad {unit_id_str}")
+        except Exception as e:
+            db.rollback()
+            print(f"[mqtt] error persistiendo eventos: {e}")
         finally:
             db.close()
 
