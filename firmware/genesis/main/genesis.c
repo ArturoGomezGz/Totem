@@ -355,6 +355,133 @@ static const char *supply_state_str(supply_state_t s)
     }
 }
 
+// ============================================================
+// Buffer offline de eventos de auditoría — cola FIFO en RAM
+// ============================================================
+// Análogo al buffer de lecturas, pero para los eventos de actuador
+// (pump_on/off, valve_open/close) que se persisten en device_events. Sin él,
+// un riego ocurrido durante una desconexión no dejaba rastro en la auditoría:
+// set_supply publicaba el evento y, si no había MQTT, se perdía. Ahora esos
+// eventos se encolan y se vuelcan al reconectar.
+//
+// Cada evento guarda su instante de captura (reloj monótono) para viajar con
+// "age_s" al volcarse y que el server reconstruya el timestamp real, igual que
+// las lecturas. La duración (duration_s) ya la mide el firmware y no depende de
+// cuándo se envíe. Es RAM (no NVS): sobrevive a cortes de red, no a cortes de
+// alimentación — mismo tradeoff que el buffer de lecturas.
+//
+// Este buffer lo posee EXCLUSIVAMENTE irrigation_task (lo escribe set_supply y
+// lo vuelca el bucle de la tarea), así que no necesita sincronización.
+#define EVENT_BUF_CAP 256
+
+typedef struct {
+    int64_t capture_us;
+    char    type[16];       // "pump_on" / "pump_off" / "valve_open" / "valve_close"
+    bool    override;       // true = trigger "override" (manual); false = "autonomous"
+    bool    has_duration;   // solo los cierres (pump_off/valve_close) llevan duración
+    float   duration_s;
+} buffered_event_t;
+
+static buffered_event_t event_buf[EVENT_BUF_CAP];
+static int event_buf_head  = 0;
+static int event_buf_count = 0;
+
+// Encola un evento de auditoría; si el buffer está lleno descarta el más antiguo.
+static void event_buf_push(const buffered_event_t *e)
+{
+    int tail = (event_buf_head + event_buf_count) % EVENT_BUF_CAP;
+    event_buf[tail] = *e;
+    if (event_buf_count < EVENT_BUF_CAP) {
+        event_buf_count++;
+    } else {
+        event_buf_head = (event_buf_head + 1) % EVENT_BUF_CAP;
+        ESP_LOGW(TAG, "Buffer de eventos lleno (%d) — descartado el más antiguo", EVENT_BUF_CAP);
+    }
+}
+
+// Publica en vivo el estado de suministro + los eventos de auditoría de una
+// transición, en un solo mensaje (formato de siempre, sin age_s). Devuelve
+// false si el publish falló, para que el llamador encole y no pierda auditoría.
+static bool publish_events_live(const char *state_str, const buffered_event_t *evs, int nev)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "state", state_str);
+    cJSON *events = cJSON_AddArrayToObject(root, "events");
+    for (int i = 0; i < nev; i++) {
+        cJSON *e = cJSON_CreateObject();
+        cJSON_AddStringToObject(e, "type", evs[i].type);
+        cJSON_AddStringToObject(e, "trigger", evs[i].override ? "override" : "autonomous");
+        if (evs[i].has_duration) {
+            cJSON_AddNumberToObject(e, "duration_s", evs[i].duration_s);
+        }
+        cJSON_AddItemToArray(events, e);
+    }
+    char *out = cJSON_PrintUnformatted(root);
+    bool ok = false;
+    if (out) {
+        ok = esp_mqtt_client_publish(mqtt_client, topic_events, out, 0, 1, 0) >= 0;
+        cJSON_free(out);
+    }
+    cJSON_Delete(root);
+    return ok;
+}
+
+// Publica SOLO el estado de suministro en vivo (sin eventos). Se usa al
+// reconectar para refrescar la vista en tiempo real del dashboard, que pudo
+// quedar desfasada mientras no había conexión.
+static void publish_state_live(const char *state_str)
+{
+    if (!mqtt_connected) {
+        return;
+    }
+    char payload[64];
+    snprintf(payload, sizeof(payload), "{\"state\":\"%s\"}", state_str);
+    esp_mqtt_client_publish(mqtt_client, topic_events, payload, 0, 1, 0);
+}
+
+// Vuelca los eventos de auditoría encolados al reconectar, más antiguo primero
+// (preserva el orden temporal). Cada evento va en su propio mensaje con age_s;
+// si un publish falla (outbox lleno) se deja en el buffer y se reintenta luego.
+static void event_buf_flush(void)
+{
+    if (event_buf_count == 0) {
+        return;
+    }
+    ESP_LOGI(TAG, "Volcando %d evento(s) de auditoría offline al reconectar", event_buf_count);
+
+    while (event_buf_count > 0 && mqtt_connected) {
+        buffered_event_t *e = &event_buf[event_buf_head];
+        double age_s = (esp_timer_get_time() - e->capture_us) / 1000000.0;
+
+        cJSON *root = cJSON_CreateObject();
+        cJSON *events = cJSON_AddArrayToObject(root, "events");
+        cJSON *ev = cJSON_CreateObject();
+        cJSON_AddStringToObject(ev, "type", e->type);
+        cJSON_AddStringToObject(ev, "trigger", e->override ? "override" : "autonomous");
+        if (e->has_duration) {
+            cJSON_AddNumberToObject(ev, "duration_s", e->duration_s);
+        }
+        cJSON_AddNumberToObject(ev, "age_s", age_s);
+        cJSON_AddItemToArray(events, ev);
+
+        char *out = cJSON_PrintUnformatted(root);
+        int mid = -1;
+        if (out) {
+            mid = esp_mqtt_client_publish(mqtt_client, topic_events, out, 0, 1, 0);
+            cJSON_free(out);
+        }
+        cJSON_Delete(root);
+
+        if (mid < 0) {
+            ESP_LOGW(TAG, "Volcado de eventos pausado (outbox saturado) — %d pendiente(s)", event_buf_count);
+            break;
+        }
+        event_buf_head = (event_buf_head + 1) % EVENT_BUF_CAP;
+        event_buf_count--;
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
 // Publica el estado del suministro y mueve los actuadores. Solo se llama
 // desde irrigation_task. Al SALIR de SUPPLY_PUMP_ON acumula el tiempo que la
 // bomba estuvo encendida; al ENTRAR a SUPPLY_PUMP_ON marca el inicio; al ir a
@@ -432,42 +559,52 @@ static void set_supply(supply_state_t next)
     // el control ahora mismo. En la transición a SUPPLY_OFF, stop_watering aún
     // no ha soltado el owner (lo hace DESPUÉS de este set_supply), así que el
     // pump_off/valve_close final se atribuye correctamente a quien regaba.
-    const char *trigger = (owner == OWNER_MANUAL) ? "override" : "autonomous";
+    bool override_flag = (owner == OWNER_MANUAL);
 
     bool v_prev, p_prev, v_next, p_next;
     supply_levels(prev, &v_prev, &p_prev);
     supply_levels(next, &v_next, &p_next);
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "state", supply_state_str(next));
-    cJSON *events = cJSON_AddArrayToObject(root, "events");
+    // Recolecta los 0..2 eventos de auditoría que generó esta transición.
+    buffered_event_t evs[2];
+    int nev = 0;
     if (p_prev != p_next) {
-        cJSON *e = cJSON_CreateObject();
-        cJSON_AddStringToObject(e, "type", p_next ? "pump_on" : "pump_off");
-        cJSON_AddStringToObject(e, "trigger", trigger);
-        // Solo el cierre (pump_off) lleva la duración del tramo que termina.
-        if (!p_next) {
-            cJSON_AddNumberToObject(e, "duration_s", pump_seg_us / 1000000.0);
-        }
-        cJSON_AddItemToArray(events, e);
+        buffered_event_t *e = &evs[nev++];
+        e->capture_us   = now_us;
+        strcpy(e->type, p_next ? "pump_on" : "pump_off");
+        e->override     = override_flag;
+        e->has_duration = !p_next;                       // solo el cierre lleva duración
+        e->duration_s   = pump_seg_us / 1000000.0f;
     }
     if (v_prev != v_next) {
-        cJSON *e = cJSON_CreateObject();
-        cJSON_AddStringToObject(e, "type", v_next ? "valve_open" : "valve_close");
-        cJSON_AddStringToObject(e, "trigger", trigger);
-        // Solo el cierre (valve_close) lleva la duración del llenado que termina.
-        if (!v_next) {
-            cJSON_AddNumberToObject(e, "duration_s", valve_seg_us / 1000000.0);
-        }
-        cJSON_AddItemToArray(events, e);
+        buffered_event_t *e = &evs[nev++];
+        e->capture_us   = now_us;
+        strcpy(e->type, v_next ? "valve_open" : "valve_close");
+        e->override     = override_flag;
+        e->has_duration = !v_next;
+        e->duration_s   = valve_seg_us / 1000000.0f;
     }
 
-    char *payload = cJSON_PrintUnformatted(root);
-    if (payload) {
-        esp_mqtt_client_publish(mqtt_client, topic_events, payload, 0, 1, 0);
-        cJSON_free(payload);
+    if (nev == 0) {
+        return;   // transición sin cambio de actuadores (defensa; no debería ocurrir)
     }
-    cJSON_Delete(root);
+
+    if (mqtt_connected) {
+        // En vivo: estado + eventos en un solo mensaje, como siempre. Si el
+        // publish falla, se encolan para no perder la auditoría.
+        if (!publish_events_live(supply_state_str(next), evs, nev)) {
+            for (int i = 0; i < nev; i++) {
+                event_buf_push(&evs[i]);
+            }
+        }
+    } else {
+        // Sin conexión: se encolan los eventos de auditoría (se vuelcan al
+        // reconectar con age_s). El estado en vivo es efímero y no se bufferea:
+        // al reconectar, publish_state_live refresca el estado actual.
+        for (int i = 0; i < nev; i++) {
+            event_buf_push(&evs[i]);
+        }
+    }
 }
 
 // Tiempo total de bomba encendida en el ciclo actual (acumulado + tramo en
@@ -1177,7 +1314,23 @@ static void irrigation_task(void *pvParameters)
     // Primera decisión a los 15s del arranque (margen para la primera lectura).
     next_decision_us = esp_timer_get_time() + (int64_t)FIRST_DECISION_DELAY_MS * 1000;
 
+    bool was_connected = false;
+
     while (1) {
+        // Al RECUPERAR la conexión MQTT: refresca el estado de suministro en
+        // vivo (la vista del dashboard pudo quedar desfasada offline) y vuelca
+        // los eventos de auditoría encolados. El volcado se hace solo si no se
+        // está regando, para no retrasar el corte de la bomba con el batch de
+        // publicaciones (el sondeo de riego corre cada SUPPLY_POLL_MS).
+        bool now_connected = mqtt_connected;
+        if (now_connected && !was_connected) {
+            publish_state_live(supply_state_str(supply_state));
+        }
+        was_connected = now_connected;
+        if (now_connected && owner == OWNER_NONE) {
+            event_buf_flush();
+        }
+
         // Cuánto esperar: mientras se riega, sondeo rápido; si no, lo que
         // falte para el deadline absoluto de la próxima decisión.
         uint32_t wait_ms;

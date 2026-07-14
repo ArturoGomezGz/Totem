@@ -157,9 +157,18 @@ class MQTTClient:
                 duration_s = ev.get("duration_s")
                 if not isinstance(duration_s, (int, float)) or duration_s < 0:
                     duration_s = None
+                # Eventos encolados offline en el ESP32 (sin NTP) traen "age_s" =
+                # segundos desde que ocurrieron, para reconstruir el instante real
+                # y no agolpar toda la auditoría en el momento del reconexión. Los
+                # eventos en vivo no lo traen y se timestampean al recibirse.
+                age_s = ev.get("age_s")
+                if isinstance(age_s, (int, float)) and age_s > 0:
+                    ev_ts = now - timedelta(seconds=age_s)
+                else:
+                    ev_ts = now
                 db.add(DeviceEvent(
                     unit_id=uuid.UUID(unit_id_str),
-                    timestamp=now,
+                    timestamp=ev_ts,
                     type=ev_type,
                     trigger=trigger,
                     duration_s=duration_s,
