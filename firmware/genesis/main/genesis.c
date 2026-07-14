@@ -135,6 +135,13 @@
 static const char *TAG = "genesis";
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 
+// Estado de la conexión MQTT, escrito por el handler de eventos y leído por
+// publish_readings_task para decidir si publica en vivo o encola offline. Es
+// una condición benigna de carrera (a lo sumo una lectura se encola de más o
+// de menos en el instante exacto de la (des)conexión, y se recupera en el
+// siguiente ciclo).
+static volatile bool mqtt_connected = false;
+
 // Espejos de estado solo para logging desde publish_readings_task — los
 // escribe pump_set/valve_set (dentro de irrigation_task) y los lee la tarea
 // de lecturas. Carrera benigna: es un log, no una decisión.
@@ -742,6 +749,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
     switch (id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT conectado");
+            mqtt_connected = true;
             esp_mqtt_client_subscribe(mqtt_client, topic_commands, 1);
             esp_mqtt_client_subscribe(mqtt_client, topic_ota,      1);
             esp_mqtt_client_subscribe(mqtt_client, topic_profile,  1);
@@ -753,6 +761,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base, int32_t id, voi
 
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "MQTT desconectado");
+            mqtt_connected = false;
             break;
 
         case MQTT_EVENT_DATA: {
@@ -810,6 +819,101 @@ static void mqtt_init(void)
 }
 
 // ============================================================
+// Buffer offline de lecturas — cola FIFO en RAM
+// ============================================================
+// Cuando no hay conexión MQTT (p.ej. el hotspot se fue), las lecturas no se
+// pierden: se encolan aquí y se vuelcan al reconectar. Es un buffer en RAM
+// (no NVS): sobrevive a cortes de red pero NO a un corte de alimentación —
+// tradeoff deliberado, porque las lecturas son frecuentes (cada 10s) y de bajo
+// valor individual, y escribir cada una en flash desgastaría la NVS. Con el fix
+// de reconexión WiFi, un corte de red ya no obliga a reiniciar el dispositivo,
+// así que este buffer cubre el caso real de pérdida de datos reportado.
+//
+// Cada entrada guarda el instante de captura (reloj monótono) para poder
+// reconstruir el timestamp real en el server: al volcarse, la lectura viaja con
+// "age_s" (segundos transcurridos desde la captura) y el server hace
+// timestamp = ahora - age_s. Sin esto, todas las lecturas encoladas caerían en
+// el instante del reconexión y la serie temporal se colapsaría. Este firmware
+// no tiene NTP, por eso se usa antigüedad relativa y no un timestamp absoluto.
+//
+// Política al llenarse: se descarta la MÁS ANTIGUA (FIFO drop-oldest) — ante un
+// corte largo interesa conservar lo más reciente.
+#define READING_BUF_CAP 720   // ~2 h de historia a 10 s por lectura (~20 KB)
+
+typedef struct {
+    int64_t capture_us;
+    float   temperature;
+    float   humidity;
+    int     light;
+    int     air_quality;
+    int     methane;
+} buffered_reading_t;
+
+static buffered_reading_t reading_buf[READING_BUF_CAP];
+static int reading_buf_head  = 0;   // índice de la lectura más antigua
+static int reading_buf_count = 0;   // lecturas pendientes en el buffer
+
+// Formatea una lectura como JSON. Si age_us > 0 añade "age_s" (lectura del
+// buffer); si es 0 lo omite (lectura en vivo, el server la timestampea al
+// recibirla, como siempre).
+static void format_reading(char *buf, size_t n, const buffered_reading_t *r, int64_t age_us)
+{
+    if (age_us > 0) {
+        snprintf(buf, n,
+            "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%d,"
+            "\"air_quality\":%d,\"methane\":%d,\"age_s\":%.0f}",
+            r->temperature, r->humidity, r->light, r->air_quality, r->methane,
+            age_us / 1000000.0);
+    } else {
+        snprintf(buf, n,
+            "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%d,"
+            "\"air_quality\":%d,\"methane\":%d}",
+            r->temperature, r->humidity, r->light, r->air_quality, r->methane);
+    }
+}
+
+// Encola una lectura. Si el buffer está lleno descarta la más antigua.
+static void reading_buf_push(const buffered_reading_t *r)
+{
+    int tail = (reading_buf_head + reading_buf_count) % READING_BUF_CAP;
+    reading_buf[tail] = *r;
+    if (reading_buf_count < READING_BUF_CAP) {
+        reading_buf_count++;
+    } else {
+        // Lleno: pisamos la posición más antigua (la de head) y avanzamos head.
+        reading_buf_head = (reading_buf_head + 1) % READING_BUF_CAP;
+        ESP_LOGW(TAG, "Buffer offline lleno (%d) — descartada la lectura más antigua", READING_BUF_CAP);
+    }
+}
+
+// Vuelca las lecturas encoladas al reconectar, más antigua primero, para
+// preservar el orden temporal. Cada una lleva su age_s. Se pausa entre publish
+// para no saturar el outbox del cliente MQTT; si un publish falla (outbox
+// lleno) se deja la lectura en el buffer y se reintenta en el próximo ciclo.
+static void reading_buf_flush(char *payload, size_t payload_size)
+{
+    if (reading_buf_count == 0) {
+        return;
+    }
+    ESP_LOGI(TAG, "Volcando %d lectura(s) offline al reconectar", reading_buf_count);
+
+    while (reading_buf_count > 0 && mqtt_connected) {
+        buffered_reading_t *r = &reading_buf[reading_buf_head];
+        int64_t age_us = esp_timer_get_time() - r->capture_us;
+        format_reading(payload, payload_size, r, age_us);
+        int mid = esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
+        if (mid < 0) {
+            // Outbox lleno o error — reintentar en el próximo ciclo sin perder nada.
+            ESP_LOGW(TAG, "Volcado pausado (outbox saturado) — %d pendiente(s)", reading_buf_count);
+            break;
+        }
+        reading_buf_head = (reading_buf_head + 1) % READING_BUF_CAP;
+        reading_buf_count--;
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+// ============================================================
 // Publicación de lecturas reales del sensor
 // ============================================================
 
@@ -829,24 +933,43 @@ static void publish_readings_task(void *pvParameters)
             } else {
                 // Entrega la lectura a irrigation_task como par atómico (T y RH
                 // juntos) — antes eran dos volatile sueltos y la decisión podía
-                // emparejar temperatura nueva con humedad vieja.
+                // emparejar temperatura nueva con humedad vieja. Esto es
+                // independiente de la conectividad: el riego autónomo sigue
+                // decidiendo aunque no haya red.
                 irrig_ev_t ev = { .type = IRRIG_EV_READING };
                 ev.data.reading.temperature = temperature;
                 ev.data.reading.humidity    = humidity;
                 xQueueSend(irrig_queue, &ev, 0);
 
-                int light = ldr_read_light();
-                int air_quality = air_quality_read();
-                int methane = methane_read();
-                snprintf(payload, sizeof(payload),
-                    "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%d,"
-                    "\"air_quality\":%d,\"methane\":%d}",
-                    temperature, humidity, light, air_quality, methane);
-                esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
-                ESP_LOGI(TAG, "temp=%.1f hum=%.1f luz=%d aire=%d metano=%d | bomba=%s | alerta=%s",
-                    temperature, humidity, light, air_quality, methane,
+                buffered_reading_t reading = {
+                    .capture_us  = esp_timer_get_time(),
+                    .temperature = temperature,
+                    .humidity    = humidity,
+                    .light       = ldr_read_light(),
+                    .air_quality = air_quality_read(),
+                    .methane     = methane_read(),
+                };
+
+                if (mqtt_connected) {
+                    // Primero vuelca lo encolado (preserva orden temporal), luego
+                    // publica la lectura en vivo.
+                    reading_buf_flush(payload, sizeof(payload));
+                    format_reading(payload, sizeof(payload), &reading, 0);
+                    int mid = esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
+                    if (mid < 0) {
+                        // Publish falló pese a estar "conectado" — no perderla.
+                        reading_buf_push(&reading);
+                    }
+                } else {
+                    // Sin conexión: se encola para volcarse al reconectar.
+                    reading_buf_push(&reading);
+                }
+
+                ESP_LOGI(TAG, "temp=%.1f hum=%.1f luz=%d aire=%d metano=%d | bomba=%s | alerta=%s | mqtt=%s buf=%d",
+                    temperature, humidity, reading.light, reading.air_quality, reading.methane,
                     pump_on    ? "ON"   : "OFF",
-                    alert_sent ? "ACTIVA" : "ok");
+                    alert_sent ? "ACTIVA" : "ok",
+                    mqtt_connected ? "ok" : "OFFLINE", reading_buf_count);
 
                 // --- Disparar alerta al cruzar el umbral (una sola vez por ciclo) ---
                 if (!alert_sent && temperature >= TEMP_ALERT) {

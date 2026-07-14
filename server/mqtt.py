@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import paho.mqtt.client as mqtt
 
@@ -98,9 +98,18 @@ class MQTTClient:
         db = SessionLocal()
         try:
             now = datetime.now(timezone.utc)
+            # Lecturas encoladas offline en el ESP32 (sin NTP) viajan con "age_s"
+            # = segundos desde su captura, para reconstruir el instante real y no
+            # colapsar toda la serie en el momento del reconexión. Las lecturas en
+            # vivo no lo traen y se timestampean al recibirse, como siempre.
+            age_s = payload.get("age_s")
+            if isinstance(age_s, (int, float)) and age_s > 0:
+                reading_ts = now - timedelta(seconds=age_s)
+            else:
+                reading_ts = now
             db.add(Reading(
                 unit_id=uuid.UUID(unit_id_str),
-                timestamp=now,
+                timestamp=reading_ts,
                 temperature=payload.get("temperature"),
                 humidity=payload.get("humidity"),
                 light=payload.get("light"),
@@ -109,6 +118,8 @@ class MQTTClient:
             ))
             unit = db.query(Unit).filter(Unit.id == unit_id_str).first()
             if unit:
+                # last_seen refleja el contacto real (ahora), no el instante de
+                # captura de una lectura que pudo haberse tomado hace rato.
                 unit.last_seen = now
             db.commit()
         except Exception as e:
