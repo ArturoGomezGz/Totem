@@ -55,6 +55,8 @@ if (import.meta.env.VITE_USE_MOCKS === 'true') {
         ...r,
         temperature: Math.round((r.temperature + (Math.random() - 0.5) * 1.0) * 10) / 10,
         humidity: Math.round((r.humidity + (Math.random() - 0.5) * 2) * 10) / 10,
+        air_quality: r.air_quality != null ? Math.round((r.air_quality + (Math.random() - 0.5) * 20) * 10) / 10 : null,
+        methane: r.methane != null ? Math.round((r.methane + (Math.random() - 0.5) * 30) * 10) / 10 : null,
         timestamp: new Date().toISOString(),
       },
     })

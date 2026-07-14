@@ -23,6 +23,8 @@ export function genReadings(hours = 24, stepMin = 20) {
       temperature: round1(temp),
       humidity: round1(hum),
       light: round1(light),
+      air_quality: round1(150 + Math.random() * 60),
+      methane: round1(300 + Math.random() * 90),
     })
   }
   return points.reverse() // más reciente primero, igual que el API real
@@ -182,12 +184,12 @@ export function seedLiveState() {
   return {
     'unit-totem-1': {
       pump_state: 'off',
-      readings: { temperature: 22.1, humidity: 61.4, light: 310, timestamp: new Date().toISOString() },
+      readings: { temperature: 22.1, humidity: 61.4, light: 310, air_quality: 165, methane: 320, timestamp: new Date().toISOString() },
       last_seen: new Date().toISOString(),
     },
     'unit-tank-1': {
       pump_state: 'off',
-      readings: { temperature: 24.0, humidity: 58.0, light: null, timestamp: minutesAgo(2) },
+      readings: { temperature: 24.0, humidity: 58.0, light: null, air_quality: null, methane: null, timestamp: minutesAgo(2) },
       last_seen: minutesAgo(2),
     },
     // unit-totem-2 deliberadamente sin entrada: simula un dispositivo recién

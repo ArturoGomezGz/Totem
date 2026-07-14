@@ -68,17 +68,35 @@
 // función de strapping (a diferencia de GPIO4/5/8/9/15).
 #define LDR_ADC_CHANNEL ADC_CHANNEL_1
 
+// Sensores de gas — fase de prueba, SOLO monitoreo (no alimentan la decisión
+// de riego). Ambos son analógicos y en el ESP32-C6 el ADC solo existe en
+// GPIO0-GPIO6 (un solo ADC, ADC1), así que van forzosamente en pines de ese
+// rango:
+//   - AIR_QUALITY (Grove Air Quality Sensor v1.3, pin SIG): índice genérico de
+//     calidad de aire (sensor resistivo no selectivo). GPIO0 = ADC1_CHANNEL_0.
+//   - METHANE (MQ-4, pin AO): concentración de metano. Solo se usa la salida
+//     analógica; la digital (DO, umbral por potenciómetro) se ignora — el
+//     umbral se aplica en software. GPIO2 = ADC1_CHANNEL_2, que se liberó al
+//     mover el LED de la válvula a GPIO18 (ver abajo).
+// Ambos publican el conteo crudo del ADC (0-4095) sin calibrar, igual que el
+// LDR: la conversión a unidades reales queda para una versión posterior.
+#define AIR_QUALITY_ADC_CHANNEL ADC_CHANNEL_0
+#define METHANE_ADC_CHANNEL     ADC_CHANNEL_2
+
 // Simulación del módulo de suministro (ver
 // docs/capa1/totem-principal/sistema-riego/modulo-suministro.md): antes de
 // regar hay que verificar que el flotador esté arriba (solución suficiente).
 // Si no, se abre la válvula NC hasta que el flotador suba.
 //   - VALVE_LED_GPIO: LED que simula la válvula NC (encendido = abierta).
+//     Se movió de GPIO2 a GPIO18 (pin digital puro, sin ADC) para liberar el
+//     canal ADC de GPIO2 y poder conectar ahí el sensor de metano. El LED solo
+//     necesita salida digital, así que no pierde nada con el cambio.
 //   - FLOAT_SWITCH_GPIO: flotador real (interruptor mecánico), con pull-up
 //     interno. A diferencia de un botón normal, este flotador **cierra el
 //     circuito (deja pasar corriente) cuando está ABAJO** y lo **abre
 //     (corta la corriente) cuando está ARRIBA** — es decir, LOW = flotador
 //     abajo (solución insuficiente), HIGH = flotador arriba (suficiente).
-#define VALVE_LED_GPIO      GPIO_NUM_2
+#define VALVE_LED_GPIO      GPIO_NUM_18
 #define FLOAT_SWITCH_GPIO   GPIO_NUM_3
 
 // Umbral de alerta — mismo criterio que firmware/simulator, ahora evaluado
@@ -505,6 +523,36 @@ static int ldr_read_light(void)
 }
 
 // ============================================================
+// Sensores de gas — calidad de aire (Grove) y metano (MQ-4)
+// ============================================================
+// Comparten el adc1_handle que ya creó ldr_init(); esta función solo configura
+// los dos canales adicionales, así que debe llamarse DESPUÉS de ldr_init().
+static void gas_sensors_init(void)
+{
+    adc_oneshot_chan_cfg_t chan_cfg = {
+        .atten    = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, AIR_QUALITY_ADC_CHANNEL, &chan_cfg));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, METHANE_ADC_CHANNEL, &chan_cfg));
+}
+
+// Conteo crudo del ADC (0-4095) para cada gas — sin calibrar, igual que el LDR.
+static int air_quality_read(void)
+{
+    int raw = 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, AIR_QUALITY_ADC_CHANNEL, &raw));
+    return raw;
+}
+
+static int methane_read(void)
+{
+    int raw = 0;
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, METHANE_ADC_CHANNEL, &raw));
+    return raw;
+}
+
+// ============================================================
 // VPD (Déficit de Presión de Vapor) — ecuación de Tetens
 // ============================================================
 // SVP(T) = 0.6108 * exp(17.27*T / (T+237.3))  [kPa]
@@ -788,12 +836,15 @@ static void publish_readings_task(void *pvParameters)
                 xQueueSend(irrig_queue, &ev, 0);
 
                 int light = ldr_read_light();
+                int air_quality = air_quality_read();
+                int methane = methane_read();
                 snprintf(payload, sizeof(payload),
-                    "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%d}",
-                    temperature, humidity, light);
+                    "{\"temperature\":%.1f,\"humidity\":%.1f,\"light\":%d,"
+                    "\"air_quality\":%d,\"methane\":%d}",
+                    temperature, humidity, light, air_quality, methane);
                 esp_mqtt_client_publish(mqtt_client, topic_readings, payload, 0, 1, 0);
-                ESP_LOGI(TAG, "temp=%.1f hum=%.1f luz=%d | bomba=%s | alerta=%s",
-                    temperature, humidity, light,
+                ESP_LOGI(TAG, "temp=%.1f hum=%.1f luz=%d aire=%d metano=%d | bomba=%s | alerta=%s",
+                    temperature, humidity, light, air_quality, methane,
                     pump_on    ? "ON"   : "OFF",
                     alert_sent ? "ACTIVA" : "ok");
 
@@ -1055,6 +1106,7 @@ void app_main(void)
     totem_dht11_gpio_init(DHT_GPIO);
     pump_led_init();
     ldr_init();
+    gas_sensors_init();
     supply_module_init();
     totem_status_led_init();
 

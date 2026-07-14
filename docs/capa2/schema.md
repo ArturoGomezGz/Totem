@@ -98,8 +98,12 @@ Todas las columnas de sensores son nullable. `NULL` no significa fallo de lectur
 | `ph` | FLOAT | Nullable — reportado tanto por `totem` (FR-43) como por `supply_tank` |
 | `ec` | FLOAT | mS/cm — nullable — reportado tanto por `totem` (FR-43) como por `supply_tank` |
 | `tank_level` | FLOAT | Nullable — solo `supply_tank` (nivel discreto derivado de los 3 flotadores, ver `capa1/tanque-de-suministro/modulo-flotadores.md`). El Totem no reporta nivel — su flotador único es control local, no telemetría |
+| `air_quality` | FLOAT | Nullable — Grove Air Quality Sensor v1.3 (índice genérico de calidad de aire). Conteo crudo del ADC (0-4095) **sin calibrar** — fase de prueba, solo monitoreo |
+| `methane` | FLOAT | Nullable — MQ-4 (salida analógica AO). Conteo crudo del ADC (0-4095) **sin calibrar** — fase de prueba, solo monitoreo |
 
 Clave primaria compuesta: `(unit_id, timestamp)`. Particionado automático por tiempo via TimescaleDB.
+
+**Decisión — 14 jul 2026.** Se agregan `air_quality` (Grove Air Quality Sensor v1.3) y `methane` (MQ-4) como sensores de prueba proporcionados por el profesor colaborador. Estatus: **solo monitoreo — no alimentan la decisión de riego** (a diferencia de T/RH/Li). Se guarda el conteo crudo del ADC del ESP32 (0-4095), sin calibrar: en esta fase interesa validar el pipeline end-to-end (firmware → MQTT → DB → dashboard), y la conversión a unidades reales (ppm, índice) queda para una versión posterior de firmware distribuible por OTA. Implementado en `firmware/genesis` 1.5.0 (migración `c3e7a1f9b8d2`). En el ESP32-C6 ambos van forzosamente en pines con ADC (GPIO0 y GPIO2); GPIO2 se liberó moviendo el LED de la válvula a GPIO18.
 
 **Decisión — 9 jul 2026 (revisa la nota original que suponía `ph`/`ec` exclusivos del tanque padre).** `ph` y `ec` los reporta **tanto el Totem como el tanque padre** — el Totem mide la solución que realmente recibe la raíz (punto de entrega real), que puede diferir del tanque padre por evaporación u otros factores; ver FR-43 y `capa1/totem-principal/sistema-decision/modulo-lectura-sensores.md`. `tank_level` sigue siendo exclusivo del tanque padre, porque el nivel del Totem no se reporta (control local vía un solo flotador, ver `capa1/totem-principal/sistema-riego/modulo-suministro.md`).
 

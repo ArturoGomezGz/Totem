@@ -22,6 +22,8 @@ class ReadingsSnapshot(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     light: Optional[float] = None
+    air_quality: Optional[float] = None
+    methane: Optional[float] = None
     timestamp: Optional[str] = None
 
 
@@ -65,6 +67,8 @@ class ReadingOut(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     light: Optional[float] = None
+    air_quality: Optional[float] = None
+    methane: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -457,8 +461,9 @@ def deactivate_unit(
     summary="Histórico de lecturas de sensores de una unidad",
     description="""
 **¿Qué hace?**
-Devuelve lecturas históricas de sensores (temperatura, humedad, luz) para una unidad,
-ordenadas de más reciente a más antigua.
+Devuelve lecturas históricas de sensores (temperatura, humedad, luz, calidad de aire,
+metano) para una unidad, ordenadas de más reciente a más antigua. Los campos que la
+unidad no reporte llegan como `null`.
 
 **¿Para qué?**
 Alimenta las gráficas temporales del dashboard. Con los defaults devuelve las últimas

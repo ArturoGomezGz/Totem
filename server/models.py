@@ -103,6 +103,11 @@ class Reading(Base):
     temperature: Mapped[Optional[float]] = mapped_column(Float)
     humidity: Mapped[Optional[float]] = mapped_column(Float)
     light: Mapped[Optional[float]] = mapped_column(Float)
+    # Sensores de gas (fase de prueba, solo monitoreo). Conteo crudo del ADC
+    # sin calibrar, igual criterio que `light`. NULL = la unidad no tiene el
+    # sensor. air_quality: Grove Air Quality v1.3; methane: MQ-4 (salida AO).
+    air_quality: Mapped[Optional[float]] = mapped_column(Float)
+    methane: Mapped[Optional[float]] = mapped_column(Float)
 
 
 class DeviceEvent(Base):

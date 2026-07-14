@@ -3,9 +3,12 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { api } from '../api'
 
 const SENSORS = [
-  { key: 'temperature', label: 'Temperatura', unit: '°C',   color: 'var(--teal-500)',  hex: '#00A99D' },
-  { key: 'humidity',    label: 'Humedad',      unit: '% RH', color: 'var(--blue-700)',  hex: '#0077AA' },
-  { key: 'light',       label: 'Luz PAR',      unit: 'µmol', color: 'var(--lime-500)',  hex: '#8DC44A' },
+  { key: 'temperature', label: 'Temperatura',   unit: '°C',   color: 'var(--teal-500)',      hex: '#00A99D' },
+  { key: 'humidity',    label: 'Humedad',        unit: '% RH', color: 'var(--blue-700)',      hex: '#0077AA' },
+  { key: 'light',       label: 'Luz PAR',        unit: 'µmol', color: 'var(--lime-500)',      hex: '#8DC44A' },
+  // Sensores de gas — conteo crudo del ADC (0-4095), sin calibrar todavía.
+  { key: 'air_quality', label: 'Calidad aire',   unit: 'ADC',  color: 'var(--status-warning)', hex: '#E0A52B' },
+  { key: 'methane',     label: 'Metano',         unit: 'ADC',  color: 'var(--status-danger)',  hex: '#C4453B' },
 ]
 
 function fmt(ts) {
