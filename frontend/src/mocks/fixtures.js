@@ -5,7 +5,11 @@ const hoursAgo   = (h) => new Date(Date.now() - h * 3600_000).toISOString()
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
 const round1     = (n) => Math.round(n * 10) / 10
 
-export function genReadings(hours = 24, stepMin = 20) {
+// `gasSinceH`: los sensores de gas (calidad de aire, metano) se agregaron
+// después, así que solo tienen histórico en las últimas `gasSinceH` horas —
+// antes llegan como null. Reproduce el caso real donde un sensor tiene menos
+// registro que los demás y la gráfica debe ajustarse a su propio tramo.
+export function genReadings(hours = 24 * 30, stepMin = 20, gasSinceH = 8) {
   const steps = Math.floor((hours * 60) / stepMin)
   const now = Date.now()
   const points = []
@@ -17,14 +21,15 @@ export function genReadings(hours = 24, stepMin = 20) {
     hum  = Math.min(85, Math.max(45, hum  + (Math.random() - 0.5) * 3))
     const h = ts.getHours()
     const light = h >= 7 && h <= 19 ? 200 + Math.random() * 250 : Math.random() * 20
+    const hasGas = i * stepMin <= gasSinceH * 60
 
     points.push({
       timestamp: ts.toISOString(),
       temperature: round1(temp),
       humidity: round1(hum),
       light: round1(light),
-      air_quality: round1(150 + Math.random() * 60),
-      methane: round1(300 + Math.random() * 90),
+      air_quality: hasGas ? round1(150 + Math.random() * 60) : null,
+      methane: hasGas ? round1(300 + Math.random() * 90) : null,
     })
   }
   return points.reverse() // más reciente primero, igual que el API real

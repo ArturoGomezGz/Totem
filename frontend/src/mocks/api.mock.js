@@ -195,7 +195,10 @@ export const mockApi = {
   // ---------- Readings / Events ----------
   getReadings: async (unit_id, params = {}) => {
     await delay()
-    const rows = store.readings[unit_id] ?? []
+    let rows = store.readings[unit_id] ?? []
+    // Espeja el endpoint real: filtra por rango temporal antes de limitar.
+    if (params.from) rows = rows.filter(r => new Date(r.timestamp) >= new Date(params.from))
+    if (params.to)   rows = rows.filter(r => new Date(r.timestamp) <= new Date(params.to))
     const limit = params.limit ?? 500
     return rows.slice(0, limit)
   },

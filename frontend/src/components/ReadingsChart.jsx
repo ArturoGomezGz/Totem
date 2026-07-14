@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../api'
 
@@ -11,32 +11,75 @@ const SENSORS = [
   { key: 'methane',     label: 'Metano',         unit: 'ADC',  color: 'var(--status-danger)',  hex: '#C4453B' },
 ]
 
-function fmt(ts) {
-  return new Date(ts).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+// Rangos hacia atrás que el usuario puede elegir. `limit` sube con el rango para
+// no truncar histórico denso (el server acepta hasta 5000). El eje se ajusta al
+// registro real de cada sensor, así que un rango amplio nunca dibuja vacío.
+const RANGES = [
+  { key: '6h',  label: '6 h',  hours: 6,   limit: 500  },
+  { key: '24h', label: '24 h', hours: 24,  limit: 1000 },
+  { key: '7d',  label: '7 d',  hours: 168, limit: 3000 },
+  { key: '30d', label: '30 d', hours: 720, limit: 5000 },
+]
+
+// Formato de tick del eje X según el span real de los datos mostrados:
+// rangos cortos → hora; rangos de días → fecha corta.
+function makeAxisFmt(spanMs) {
+  const DAY = 86_400_000
+  if (spanMs <= 1.5 * DAY) {
+    return ts => new Date(ts).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+  }
+  return ts => new Date(ts).toLocaleDateString('es', { day: '2-digit', month: '2-digit' })
+}
+
+// Etiqueta completa para el tooltip: siempre fecha + hora, sin ambigüedad.
+function fmtFull(ts) {
+  return new Date(ts).toLocaleString('es', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
+}
+
+// Resumen legible del tramo con datos ("21/07 08:15 — 22/07 10:20").
+function fmtSpan(fromTs, toTs) {
+  return `${fmtFull(fromTs)} — ${fmtFull(toTs)}`
 }
 
 export default function ReadingsChart({ unitId }) {
-  const [data, setData]       = useState([])
+  const [rows, setRows]       = useState([])
   const [sensor, setSensor]   = useState('temperature')
+  const [range, setRange]     = useState('24h')
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
+  // El fetch depende solo del rango: una misma respuesta trae todos los sensores,
+  // así que cambiar de sensor no recarga nada (filtrado en cliente, instantáneo).
   useEffect(() => {
+    const cfg = RANGES.find(r => r.key === range)
+    const from = new Date(Date.now() - cfg.hours * 3_600_000).toISOString()
     setLoading(true)
-    api.getReadings(unitId)
-      .then(rows => {
-        setData([...rows].reverse().map(r => ({ time: fmt(r.timestamp), value: r[sensor] })))
-        setError(null)
-      })
+    api.getReadings(unitId, { from, limit: cfg.limit })
+      .then(res => { setRows(res); setError(null) })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [unitId, sensor])
+  }, [unitId, range])
 
   const current = SENSORS.find(s => s.key === sensor)
 
+  // Puntos del sensor activo, descartando lecturas sin valor (sensores agregados
+  // más tarde no tienen histórico completo). El eje se ajusta a lo que quede.
+  const data = useMemo(() => {
+    return rows
+      .filter(r => r[sensor] != null)
+      .map(r => ({ ts: new Date(r.timestamp).getTime(), value: r[sensor] }))
+      .sort((a, b) => a.ts - b.ts)
+  }, [rows, sensor])
+
+  const spanMs   = data.length > 1 ? data[data.length - 1].ts - data[0].ts : 0
+  const axisFmt  = makeAxisFmt(spanMs)
+  const hasData  = data.length > 0
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
         {SENSORS.map(s => {
           const active = sensor === s.key
           return (
@@ -59,60 +102,140 @@ export default function ReadingsChart({ unitId }) {
         })}
       </div>
 
-      {loading && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Cargando...</p>}
-      {error   && <p style={{ color: 'var(--status-danger)', fontSize: 'var(--text-sm)' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--status-danger)', fontSize: 'var(--text-sm)' }}>{error}</p>}
 
-      {!loading && !error && data.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-          Sin lecturas en las últimas 24 h.
-        </p>
-      )}
-
-      {!loading && data.length > 0 && (
+      {!error && (
         <div style={{
           background: 'var(--surface-card)', border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-md)', padding: 'var(--space-4)',
           boxShadow: 'var(--shadow-sm)',
         }}>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={data} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eaeef2" />
-              <XAxis
-                dataKey="time"
-                tick={{ fill: '#8793a3', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
-                interval="preserveStartEnd"
-                axisLine={{ stroke: '#d9e0e7' }}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: '#8793a3', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
-                unit={` ${current.unit}`}
-                width={72}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: '#ffffff', border: '1px solid #d9e0e7',
-                  borderRadius: 8, fontSize: 13,
-                  fontFamily: 'Source Sans 3, sans-serif', boxShadow: '0 4px 12px rgba(0,58,92,0.10)',
-                }}
-                labelStyle={{ color: '#5a6675', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11 }}
-                itemStyle={{ color: current.hex }}
-                formatter={v => [`${v} ${current.unit}`, current.label]}
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={current.hex}
-                dot={false}
-                strokeWidth={2}
-                activeDot={{ r: 4, fill: current.hex, strokeWidth: 0 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {/* Cabecera del card: sensor + tramo real a la izquierda, selector de
+              rango a la derecha. En móvil el selector baja y ocupa todo el ancho. */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+            gap: 'var(--space-3)', flexWrap: 'wrap', marginBottom: 'var(--space-3)',
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{
+                fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
+                fontSize: 'var(--text-base)', color: 'var(--text-strong)',
+              }}>
+                {current.label} <span style={{ color: 'var(--text-muted)', fontWeight: 'var(--weight-regular)' }}>· {current.unit}</span>
+              </div>
+              {hasData && (
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: '11px',
+                  color: 'var(--text-muted)', marginTop: 2,
+                }}>
+                  {fmtSpan(data[0].ts, data[data.length - 1].ts)}
+                </div>
+              )}
+            </div>
+
+            <RangeSelector value={range} onChange={setRange} />
+          </div>
+
+          <div style={{ height: 240, position: 'relative' }}>
+            {loading && (
+              <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', margin: 0 }}>
+                Cargando...
+              </p>
+            )}
+
+            {!loading && !hasData && (
+              <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', margin: 0, textAlign: 'center', padding: '0 var(--space-4)' }}>
+                Sin lecturas de {current.label.toLowerCase()} en este rango.
+              </p>
+            )}
+
+            {!loading && hasData && (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eaeef2" />
+                  <XAxis
+                    dataKey="ts"
+                    type="number"
+                    scale="time"
+                    domain={['dataMin', 'dataMax']}
+                    tickFormatter={axisFmt}
+                    tick={{ fill: '#8793a3', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
+                    minTickGap={48}
+                    axisLine={{ stroke: '#d9e0e7' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: '#8793a3', fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
+                    unit={` ${current.unit}`}
+                    width={72}
+                    domain={['auto', 'auto']}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#ffffff', border: '1px solid #d9e0e7',
+                      borderRadius: 8, fontSize: 13,
+                      fontFamily: 'Source Sans 3, sans-serif', boxShadow: '0 4px 12px rgba(0,58,92,0.10)',
+                    }}
+                    labelStyle={{ color: '#5a6675', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11 }}
+                    itemStyle={{ color: current.hex }}
+                    labelFormatter={fmtFull}
+                    formatter={v => [`${v} ${current.unit}`, current.label]}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke={current.hex}
+                    dot={false}
+                    strokeWidth={2}
+                    activeDot={{ r: 4, fill: current.hex, strokeWidth: 0 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Segmented control de rango: botones unidos sobre un track hundido. Compacto,
+// no compite visualmente con los chips de sensor. En móvil crece a todo el ancho.
+function RangeSelector({ value, onChange }) {
+  return (
+    <div
+      role="group"
+      aria-label="Rango de tiempo"
+      style={{
+        display: 'inline-flex', gap: 2, padding: 2,
+        background: 'var(--surface-fill)', borderRadius: 'var(--radius-pill)',
+        border: '1px solid var(--border-subtle)',
+      }}
+    >
+      {RANGES.map(r => {
+        const active = value === r.key
+        return (
+          <button
+            key={r.key}
+            onClick={() => onChange(r.key)}
+            aria-pressed={active}
+            style={{
+              padding: '4px 12px', borderRadius: 'var(--radius-pill)', border: 'none',
+              background: active ? 'var(--surface-card)' : 'transparent',
+              color: active ? 'var(--text-body)' : 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: active ? 'var(--weight-semibold)' : 'var(--weight-regular)',
+              fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: active ? 'var(--shadow-sm)' : 'none',
+              transition: 'all var(--duration-base) var(--ease-standard)',
+            }}
+          >
+            {r.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
