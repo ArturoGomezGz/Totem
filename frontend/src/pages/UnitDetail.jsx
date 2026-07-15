@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Card, StatCard, Badge, Alert, Tabs, StatusDot } from '../design-system'
 import AppShell from '../components/AppShell'
@@ -21,6 +22,7 @@ const SENSOR_ACCENTS = {
 }
 
 export default function UnitDetail() {
+  const { t }            = useTranslation()
   const { unitId }       = useParams()
   const { activeOrgId }  = useOrg()
 
@@ -70,7 +72,7 @@ export default function UnitDetail() {
       setPumpPending(true)
       pendingTimer.current = setTimeout(() => setPumpPending(false), CMD_LOCK_MS)
     } catch {
-      setCmdError('Error al enviar comando. Verifica la conexión.')
+      setCmdError(t('unitDetail.commandError'))
     } finally {
       setCmdLoading(false)
     }
@@ -96,7 +98,7 @@ export default function UnitDetail() {
   const connectionBadge = (
     <StatusDot
       tone={isOnline ? 'success' : 'neutral'}
-      title={isOnline ? 'En línea' : !wsConnected ? 'Reconectando' : !unit ? 'Esperando...' : 'Sin señal'}
+      title={isOnline ? t('unitDetail.online') : !wsConnected ? t('unitDetail.reconnecting') : !unit ? t('unitDetail.waiting') : t('unitDetail.offline')}
     />
   )
 
@@ -107,28 +109,28 @@ export default function UnitDetail() {
           fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
           fontSize: 'var(--text-xl)', color: 'var(--text-strong)', margin: 0,
         }}>
-          {unitMeta?.name ?? 'Cargando...'}
+          {unitMeta?.name ?? t('unitDetail.loading')}
         </h2>
         {connectionBadge}
         {unitMeta?.type === 'totem' && (
           <Badge tone={activeProfile ? 'blue' : 'neutral'}>
-            {activeProfile ? activeProfile.name : 'Sin perfil'}
+            {activeProfile ? activeProfile.name : t('unitDetail.noProfile')}
           </Badge>
         )}
       </div>
 
       <Tabs
         tabs={[
-          { id: 'live',     label: 'En vivo'  },
-          { id: 'readings', label: 'Lecturas' },
-          { id: 'events',   label: 'Eventos'  },
+          { id: 'live',     label: t('unitDetail.tabs.live')  },
+          { id: 'readings', label: t('unitDetail.tabs.readings') },
+          { id: 'events',   label: t('unitDetail.tabs.events')  },
           {
             id: 'alerts',
             label: alertSummary.count > 0
-              ? <>Alertas <Badge tone={alertSummary.hasCritical ? 'danger' : 'warning'}>{alertSummary.count}</Badge></>
-              : 'Alertas',
+              ? <>{t('unitDetail.tabs.alerts')} <Badge tone={alertSummary.hasCritical ? 'danger' : 'warning'}>{alertSummary.count}</Badge></>
+              : t('unitDetail.tabs.alerts'),
           },
-          { id: 'settings', label: 'Configuración' },
+          { id: 'settings', label: t('unitDetail.tabs.settings') },
         ]}
         value={tab} onChange={setTab} style={{ marginBottom: 'var(--space-6)' }}
       />
@@ -152,7 +154,7 @@ export default function UnitDetail() {
                 textTransform: 'uppercase', letterSpacing: 'var(--tracking-caps)',
                 display: 'block', marginBottom: 'var(--space-3)',
               }}>
-                Lecturas en vivo
+                {t('unitDetail.liveReadings')}
                 {lastSeenStr && (
                   <span style={{ fontWeight: 'var(--weight-regular)', marginLeft: 'var(--space-2)', color: 'var(--ink-300)' }}>
                     · {lastSeenStr}
@@ -160,16 +162,16 @@ export default function UnitDetail() {
                 )}
               </span>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-3)' }}>
-                <StatCard value={r.temperature != null ? `${r.temperature} °C` : '—'} label="Temperatura"  accent={SENSOR_ACCENTS.temperature} />
-                <StatCard value={r.humidity    != null ? `${r.humidity} %`    : '—'} label="Humedad"       accent={SENSOR_ACCENTS.humidity}    />
-                <StatCard value={r.light       != null ? `${r.light}`         : '—'} label="Luz PAR"       accent={SENSOR_ACCENTS.light}       />
-                <StatCard value={r.air_quality != null ? `${r.air_quality}`   : '—'} label="Calidad aire"  accent={SENSOR_ACCENTS.air_quality} />
-                <StatCard value={r.methane     != null ? `${r.methane}`       : '—'} label="Metano"        accent={SENSOR_ACCENTS.methane}     />
+                <StatCard value={r.temperature != null ? `${r.temperature} °C` : '—'} label={t('unitDetail.sensorTemperature')}  accent={SENSOR_ACCENTS.temperature} />
+                <StatCard value={r.humidity    != null ? `${r.humidity} %`    : '—'} label={t('unitDetail.sensorHumidity')}       accent={SENSOR_ACCENTS.humidity}    />
+                <StatCard value={r.light       != null ? `${r.light}`         : '—'} label={t('unitDetail.sensorLight')}       accent={SENSOR_ACCENTS.light}       />
+                <StatCard value={r.air_quality != null ? `${r.air_quality}`   : '—'} label={t('unitDetail.sensorAirQuality')}  accent={SENSOR_ACCENTS.air_quality} />
+                <StatCard value={r.methane     != null ? `${r.methane}`       : '—'} label={t('unitDetail.sensorMethane')}        accent={SENSOR_ACCENTS.methane}     />
               </div>
             </div>
           ) : (
             <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              Esperando datos del dispositivo...
+              {t('unitDetail.waitingDeviceData')}
             </p>
           )}
         </div>
@@ -186,17 +188,18 @@ export default function UnitDetail() {
 }
 
 function PumpCard({ on, phase, offline, lastSeen, onToggle }) {
+  const { t } = useTranslation()
   const supplying   = phase === 'supplying'
   const isBlocked   = phase === 'sending' || phase === 'pending' || supplying
   const accentColor = offline ? 'var(--ink-300)' : supplying ? 'var(--status-warning)' : on ? 'var(--green-500)' : 'var(--blue-700)'
-  const statusLabel = offline ? 'SIN SEÑAL' : supplying ? 'ABASTECIENDO TANQUE' : on ? 'BOMBA ENCENDIDA' : 'BOMBA APAGADA'
+  const statusLabel = offline ? t('unitDetail.statusOffline') : supplying ? t('unitDetail.statusSupplying') : on ? t('unitDetail.statusOn') : t('unitDetail.statusOff')
   const statusColor = offline ? 'var(--text-muted)' : supplying ? 'var(--status-warning)' : on ? 'var(--green-600)' : 'var(--text-muted)'
   const dotColor    = offline ? 'var(--ink-300)' : supplying ? 'var(--status-warning)' : on ? 'var(--green-500)' : 'var(--ink-300)'
   const dotGlow     = supplying ? 'var(--status-warning-fill)' : 'var(--green-100)'
-  const btnLabel    = phase === 'sending' ? 'Enviando...'
-    : phase === 'pending' ? 'Confirmando...'
-    : supplying ? 'Esperando nivel de tanque...'
-    : on ? 'Apagar bomba' : 'Regar ahora'
+  const btnLabel    = phase === 'sending' ? t('unitDetail.sending')
+    : phase === 'pending' ? t('unitDetail.confirming')
+    : supplying ? t('unitDetail.waitingTankLevel')
+    : on ? t('unitDetail.turnOff') : t('unitDetail.waterNow')
 
   return (
     <Card accent={accentColor}>
@@ -221,13 +224,12 @@ function PumpCard({ on, phase, offline, lastSeen, onToggle }) {
       </div>
       {offline ? (
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-          El dispositivo no envía datos. El control no está disponible.
+          {t('unitDetail.offlineMessage')}
         </p>
       ) : supplying ? (
         <>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
-            El nivel de solución es insuficiente — la válvula está abierta llenando el tanque.
-            La bomba arrancará sola en cuanto suba el flotador.
+            {t('unitDetail.supplyingMessage')}
           </p>
           <Button fullWidth size="lg" variant="outline" disabled>
             {btnLabel}

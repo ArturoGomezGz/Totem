@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Alert, Badge } from '../design-system'
 import { copyToClipboard } from '../utils/clipboard'
@@ -6,6 +7,7 @@ import { copyToClipboard } from '../utils/clipboard'
 const COUNTDOWN_SECONDS = 300
 
 export default function TelegramLink() {
+  const { t }                     = useTranslation()
   const [status, setStatus]       = useState(null)
   const [token, setToken]         = useState(null)
   const [countdown, setCountdown] = useState(0)
@@ -76,35 +78,35 @@ export default function TelegramLink() {
         fontSize: 'var(--text-base)', color: 'var(--text-strong)',
         marginBottom: 'var(--space-4)',
       }}>
-        Telegram
+        {t('telegramLink.title')}
       </h3>
 
       {status.linked ? (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-            <Badge tone="success">Vinculado</Badge>
+            <Badge tone="success">{t('telegramLink.linked')}</Badge>
             {status.linked_at && (
               <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                desde {new Date(status.linked_at).toLocaleDateString('es-MX')}
+                {t('telegramLink.linkedSince', { date: new Date(status.linked_at).toLocaleDateString('es-MX') })}
               </span>
             )}
           </div>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-            Recibirás alertas de tus organizaciones en Telegram.
+            {t('telegramLink.linkedMessage')}
           </p>
           <Button variant="outline" size="sm" onClick={unlink} disabled={loading}>
-            {loading ? 'Desvinculando...' : 'Desvincular'}
+            {loading ? t('telegramLink.unlinking') : t('telegramLink.unlink')}
           </Button>
         </div>
       ) : (
         <div>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-            Vincula tu cuenta para recibir alertas directamente en Telegram.
+            {t('telegramLink.unlinkedMessage')}
           </p>
 
           {!token ? (
             <Button variant="primary" onClick={generateToken} disabled={loading}>
-              {loading ? 'Generando...' : 'Vincular Telegram'}
+              {loading ? t('telegramLink.generating') : t('telegramLink.linkButton')}
             </Button>
           ) : (
             <div style={{
@@ -118,7 +120,7 @@ export default function TelegramLink() {
                   fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
                   textTransform: 'uppercase', letterSpacing: 'var(--tracking-caps)',
                 }}>
-                  Token de vinculación
+                  {t('telegramLink.tokenLabel')}
                 </span>
                 <span style={{
                   fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
@@ -138,12 +140,12 @@ export default function TelegramLink() {
 
               <div style={{ borderTop: '1px solid var(--blue-100)', paddingTop: 'var(--space-4)' }}>
                 <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-body)', marginBottom: 'var(--space-2)' }}>
-                  Abre{' '}
+                  {t('telegramLink.openBot')}{' '}
                   {token.bot_username
                     ? <a href={`https://t.me/${token.bot_username}`} target="_blank" rel="noreferrer" style={{ color: 'var(--blue-700)', fontWeight: 'var(--weight-semibold)' }}>@{token.bot_username}</a>
-                    : 'el bot'
+                    : t('telegramLink.theBot')
                   }{' '}
-                  en Telegram y escribe:
+                  {t('telegramLink.openBotSuffix')}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
                   <code style={{
@@ -154,12 +156,12 @@ export default function TelegramLink() {
                   }}>
                     /vincular {token.token}
                   </code>
-                  <Button size="sm" variant="outline" onClick={copyCommand}>{copied ? 'Copiado' : 'Copiar'}</Button>
+                  <Button size="sm" variant="outline" onClick={copyCommand}>{copied ? t('common.copied') : t('common.copy')}</Button>
                 </div>
               </div>
 
               <Button variant="ghost" size="sm" onClick={() => setToken(null)} style={{ alignSelf: 'flex-start' }}>
-                Cancelar
+                {t('telegramLink.cancel')}
               </Button>
             </div>
           )}

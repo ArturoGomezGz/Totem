@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Card, Alert, Badge } from '../design-system'
 import AppShell from '../components/AppShell'
@@ -26,14 +27,15 @@ function InfoRow({ label, value, children }) {
   )
 }
 
-function formatRange(min, max, unit) {
-  if (min == null && max == null) return 'Sin definir'
+function formatRange(min, max, unit, t) {
+  if (min == null && max == null) return t('profileDetail.undefined')
   if (min != null && max != null) return `${min} – ${max} ${unit}`
   if (min != null) return `≥ ${min} ${unit}`
   return `≤ ${max} ${unit}`
 }
 
 export default function ProfileDetail() {
+  const { t }            = useTranslation()
   const { profileId }   = useParams()
   const navigate         = useNavigate()
   const { activeOrgId }  = useOrg()
@@ -59,7 +61,7 @@ export default function ProfileDetail() {
       .then(list => {
         const found = list.find(p => p.id === profileId)
         if (found) setProfile(found)
-        else setLoadError('Perfil no encontrado.')
+        else setLoadError(t('profileDetail.notFound'))
       })
       .catch(err => setLoadError(err.message))
       .finally(() => setLoading(false))
@@ -91,7 +93,7 @@ export default function ProfileDetail() {
     setFormError(null)
     let body
     try {
-      body = formToProfileBody(form, activeOrgId, methods)
+      body = formToProfileBody(form, activeOrgId, methods, t)
     } catch (err) {
       setFormError(err.message)
       return
@@ -122,7 +124,7 @@ export default function ProfileDetail() {
   if (loading) {
     return (
       <AppShell>
-        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Cargando...</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>{t('unitDetail.loading')}</p>
       </AppShell>
     )
   }
@@ -130,7 +132,7 @@ export default function ProfileDetail() {
   if (loadError || !profile) {
     return (
       <AppShell>
-        <Alert tone="danger">{loadError ?? 'Perfil no encontrado.'}</Alert>
+        <Alert tone="danger">{loadError ?? t('profileDetail.notFound')}</Alert>
       </AppShell>
     )
   }
@@ -146,7 +148,7 @@ export default function ProfileDetail() {
           <span style={{ flex: 1 }} />
           {!editing && (
             <Button variant="outline" size="sm" onClick={startEditing}>
-              Editar
+              {t('profileDetail.edit')}
             </Button>
           )}
         </div>
@@ -155,7 +157,7 @@ export default function ProfileDetail() {
             onClick={() => navigate('/profiles')}
             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-muted)', textDecoration: 'underline', fontSize: 'inherit' }}
           >
-            ← Volver a perfiles
+            {t('profileDetail.back')}
           </button>
         </p>
 
@@ -170,10 +172,10 @@ export default function ProfileDetail() {
             />
             <div style={{ display: 'flex', gap: 'var(--space-3)', paddingTop: 'var(--space-2)', borderTop: '1px solid var(--border-subtle)' }}>
               <Button type="submit" disabled={saving}>
-                {saving ? 'Guardando...' : 'Guardar cambios'}
+                {saving ? t('profileDetail.savingSubmit') : t('profileDetail.saveChanges')}
               </Button>
               <Button type="button" variant="ghost" onClick={cancelEditing}>
-                Cancelar
+                {t('profileDetail.cancel')}
               </Button>
             </div>
           </form>
@@ -181,15 +183,15 @@ export default function ProfileDetail() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
 
             <Card>
-              <span style={eyebrow}>Rangos óptimos de sensores</span>
-              <InfoRow label="Temperatura" value={formatRange(profile.temp_min, profile.temp_max, '°C')} />
-              <InfoRow label="Humedad" value={formatRange(profile.humidity_min, profile.humidity_max, '%')} />
-              <InfoRow label="Luz" value={formatRange(profile.light_min, profile.light_max, 'PAR')} />
+              <span style={eyebrow}>{t('profileDetail.sensorRanges')}</span>
+              <InfoRow label={t('profileDetail.temperature')} value={formatRange(profile.temp_min, profile.temp_max, '°C', t)} />
+              <InfoRow label={t('profileDetail.humidity')} value={formatRange(profile.humidity_min, profile.humidity_max, '%', t)} />
+              <InfoRow label={t('profileDetail.light')} value={formatRange(profile.light_min, profile.light_max, 'PAR', t)} />
             </Card>
 
             <Card>
-              <span style={eyebrow}>Parámetros de riego</span>
-              <InfoRow label="Método" value={methods.find(m => m.key === profile.irrigation_method)?.name ?? profile.irrigation_method} />
+              <span style={eyebrow}>{t('profileDetail.irrigationParams')}</span>
+              <InfoRow label={t('profileDetail.method')} value={methods.find(m => m.key === profile.irrigation_method)?.name ?? profile.irrigation_method} />
               <div style={{ marginTop: 'var(--space-3)' }}>
                 <pre style={{
                   fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text-strong)',
@@ -203,25 +205,24 @@ export default function ProfileDetail() {
             </Card>
 
             <Card accent="var(--status-danger)">
-              <span style={{ ...eyebrow, color: 'var(--status-danger)' }}>Zona de peligro</span>
+              <span style={{ ...eyebrow, color: 'var(--status-danger)' }}>{t('profileDetail.dangerZone')}</span>
               <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-                Eliminar este perfil no afecta las unidades que ya tienen lecturas registradas, pero
-                cualquier unidad con este perfil como activo se queda sin perfil asignado.
+                {t('profileDetail.deleteWarning')}
               </p>
               {!deleteConfirm ? (
                 <Button variant="danger" size="sm" onClick={() => setDeleteConfirm(true)}>
-                  Eliminar perfil
+                  {t('profileDetail.deleteButton')}
                 </Button>
               ) : (
                 <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>
-                    ¿Seguro? No se puede revertir.
+                    {t('profileDetail.confirmDelete')}
                   </span>
                   <Button variant="danger" size="sm" disabled={deleting} onClick={handleDelete}>
-                    {deleting ? '...' : 'Sí, eliminar'}
+                    {deleting ? t('profileDetail.deleting') : t('profileDetail.confirmDeleteButton')}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)}>
-                    Cancelar
+                    {t('profileDetail.cancel')}
                   </Button>
                 </div>
               )}

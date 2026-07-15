@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Badge } from '../design-system'
 
@@ -60,8 +61,9 @@ function groupCycles(events) {
 }
 
 function CycleCard({ cycle }) {
+  const { t } = useTranslation()
   const tone = cycle.inProgress ? 'blue' : 'success'
-  const label = cycle.inProgress ? 'Riego en curso' : 'Riego'
+  const label = cycle.inProgress ? t('eventsList.inProgress') : t('eventsList.irrigation')
 
   return (
     <div style={{
@@ -78,7 +80,7 @@ function CycleCard({ cycle }) {
             fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
             textTransform: 'uppercase', letterSpacing: 'var(--tracking-caps)',
           }}>
-            {cycle.trigger === 'autonomous' ? 'Autónomo' : 'Manual'}
+            {cycle.trigger === 'autonomous' ? t('eventsList.autonomous') : t('eventsList.manual')}
           </span>
         </div>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
@@ -89,18 +91,18 @@ function CycleCard({ cycle }) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         {cycle.inProgress && cycle.pump == null ? (
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-            {cycle.pumping ? 'Bombeando…' : 'Llenando el tanque…'}
+            {cycle.pumping ? t('eventsList.pumping') : t('eventsList.filling')}
           </span>
         ) : (
           <>
             {cycle.pump != null && (
               <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
-                {fmtDur(cycle.pump)} de bombeo
+                {t('eventsList.pumpDuration', { duration: fmtDur(cycle.pump) })}
               </span>
             )}
             {cycle.fill != null && (
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                {cycle.pump != null && '· '}{fmtDur(cycle.fill)} de llenado
+                {cycle.pump != null && '· '}{t('eventsList.fillDuration', { duration: fmtDur(cycle.fill) })}
               </span>
             )}
           </>
@@ -111,6 +113,7 @@ function CycleCard({ cycle }) {
 }
 
 export default function EventsList({ unitId }) {
+  const { t } = useTranslation()
   const [events, setEvents]   = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
@@ -122,11 +125,11 @@ export default function EventsList({ unitId }) {
       .finally(() => setLoading(false))
   }, [unitId])
 
-  if (loading) return <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Cargando...</p>
+  if (loading) return <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>{t('eventsList.loading')}</p>
   if (error)   return <p style={{ color: 'var(--status-danger)', fontSize: 'var(--text-sm)' }}>{error}</p>
 
   const cycles = groupCycles(events)
-  if (cycles.length === 0) return <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Sin riegos en los últimos 7 días.</p>
+  if (cycles.length === 0) return <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>{t('eventsList.noEvents')}</p>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>

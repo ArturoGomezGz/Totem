@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useOrg } from '../contexts/OrgContext'
 
 export default function Navbar({ right = null }) {
+  const { t }             = useTranslation()
   const navigate          = useNavigate()
   const { orgs, activeOrg, switchOrg } = useOrg()
   const [open, setOpen]   = useState(false)
@@ -69,7 +71,7 @@ export default function Navbar({ right = null }) {
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
         >
           <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {activeOrg?.name ?? 'Sin organización'}
+            {activeOrg?.name ?? t('nav.noOrg')}
           </span>
           <span style={{ fontSize: 10, opacity: 0.7, flexShrink: 0 }}>▾</span>
         </button>
@@ -109,7 +111,7 @@ export default function Navbar({ right = null }) {
               </div>
             ) : (
               <p style={{ padding: 'var(--space-4)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                Sin organizaciones
+                {t('nav.noOrgs')}
               </p>
             )}
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 'var(--space-2) 0' }}>
@@ -117,13 +119,13 @@ export default function Navbar({ right = null }) {
                 onClick={() => { navigate('/organizations/new'); setOpen(false) }}
                 style={dropdownItem}
               >
-                + Nueva organización
+                {t('nav.newOrg')}
               </button>
               <button
                 onClick={() => { navigate('/organizations'); setOpen(false) }}
                 style={{ ...dropdownItem, color: 'var(--text-muted)' }}
               >
-                Gestionar organizaciones
+                {t('nav.manageOrgs')}
               </button>
             </div>
           </div>
@@ -142,7 +144,7 @@ export default function Navbar({ right = null }) {
 
       {/* Ajustes */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0 }}>
-        <button onClick={() => navigate('/settings')} style={navBtn}>Ajustes</button>
+        <button onClick={() => navigate('/settings')} style={navBtn}>{t('nav.settings')}</button>
       </div>
 
     </header>

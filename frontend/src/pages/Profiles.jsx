@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Card, Alert } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useOrg } from '../contexts/OrgContext'
 
 export default function Profiles() {
+  const { t }                      = useTranslation()
   const navigate                   = useNavigate()
   const { activeOrgId, activeOrg } = useOrg()
 
@@ -32,10 +34,10 @@ export default function Profiles() {
           border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-md)',
         }}>
           <p style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)', fontSize: 'var(--text-base)', color: 'var(--text-strong)', marginBottom: 'var(--space-2)' }}>
-            Sin organización activa
+            {t('common.noOrganizationActive')}
           </p>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-            Selecciona una organización en el menú de la barra superior.
+            {t('profiles.selectOrgHint')}
           </p>
         </div>
       </AppShell>
@@ -50,7 +52,7 @@ export default function Profiles() {
             fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
             fontSize: 'var(--text-xl)', color: 'var(--text-strong)',
           }}>
-            Perfiles de cultivo
+            {t('profiles.title')}
           </h2>
           {activeOrg && (
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
@@ -59,7 +61,7 @@ export default function Profiles() {
           )}
         </div>
         <Button variant="primary" size="sm" onClick={() => navigate('/profiles/new')}>
-          + Nuevo
+          {t('profiles.newButton')}
         </Button>
       </div>
 
@@ -76,10 +78,10 @@ export default function Profiles() {
           color: 'var(--text-muted)',
         }}>
           <p style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--text-base)' }}>
-            No hay perfiles en esta organización.
+            {t('profiles.noProfiles')}
           </p>
           <Button variant="primary" onClick={() => navigate('/profiles/new')}>
-            Crear primer perfil
+            {t('profiles.createFirst')}
           </Button>
         </div>
       )}

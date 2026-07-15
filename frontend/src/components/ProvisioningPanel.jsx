@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button, Alert, Card, Input } from '../design-system'
 import { buildNvsCsv, downloadTextFile } from '../utils/nvsConfig'
 import { copyToClipboard } from '../utils/clipboard'
@@ -18,6 +19,7 @@ export default function ProvisioningPanel({
   unitId, apiKey, editable = true,
   initialWifiSsid = '', initialWifiPass = '', initialMqttUri = '<IP-de-tu-server>:1883',
 }) {
+  const { t } = useTranslation()
   const [wifiSsid, setWifiSsid] = useState(initialWifiSsid)
   const [wifiPass, setWifiPass] = useState(initialWifiPass)
   const [mqttHost, setMqttHost] = useState(stripMqttPrefix(initialMqttUri))
@@ -44,25 +46,24 @@ export default function ProvisioningPanel({
 
   return (
     <>
-      <Alert tone="warning" title="Guarda esta información — no vuelve a mostrarse" style={{ marginBottom: 'var(--space-5)' }}>
-        Descarga o copia el archivo de configuración antes de salir de esta página.
+      <Alert tone="warning" title={t('provisioning.saveWarningTitle')} style={{ marginBottom: 'var(--space-5)' }}>
+        {t('provisioning.saveWarningBody')}
       </Alert>
 
       <Card>
-        <span style={eyebrow}>Archivo de configuración (nvs_config.csv)</span>
+        <span style={eyebrow}>{t('provisioning.fileTitle')}</span>
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-          Contiene la API Key y los datos de red para flashear el dispositivo. Se arma en tu
-          navegador — no se envía ni se guarda en el servidor.
+          {t('provisioning.fileDescription')}
         </p>
 
         {editable && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-            <Input label="SSID WiFi" value={wifiSsid} onChange={e => setWifiSsid(e.target.value)} />
-            <Input label="Contraseña WiFi" type="password" value={wifiPass} onChange={e => setWifiPass(e.target.value)} />
+            <Input label={t('provisioning.wifiSsid')} value={wifiSsid} onChange={e => setWifiSsid(e.target.value)} />
+            <Input label={t('provisioning.wifiPassword')} type="password" value={wifiPass} onChange={e => setWifiPass(e.target.value)} />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
               <label style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
-                MQTT URI
+                {t('provisioning.mqttUri')}
               </label>
               <div style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
                 <span style={{
@@ -85,7 +86,7 @@ export default function ProvisioningPanel({
                 />
               </div>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                IP local de tu server (RPi/PC), puerto 1883
+                {t('provisioning.mqttHint')}
               </span>
             </div>
           </div>
@@ -93,7 +94,7 @@ export default function ProvisioningPanel({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
           <span style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-strong)' }}>
-            API Key
+            {t('provisioning.apiKey')}
           </span>
           <code style={{
             display: 'block', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)',
@@ -106,15 +107,15 @@ export default function ProvisioningPanel({
 
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
           <Button variant="primary" size="md" onClick={download}>
-            Descargar nvs_config.csv
+            {t('provisioning.download')}
           </Button>
           <Button variant="outline" size="md" onClick={copyContent}>
-            {copied ? 'Copiado' : 'Copiar contenido'}
+            {copied ? t('provisioning.copied') : t('provisioning.copyContent')}
           </Button>
         </div>
         {copyError && (
           <Alert tone="danger" style={{ marginTop: 'var(--space-3)' }}>
-            No se pudo copiar automáticamente — usa "Descargar" en su lugar.
+            {t('provisioning.copyError')}
           </Alert>
         )}
       </Card>

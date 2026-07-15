@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Alert, Input } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useOrg } from '../contexts/OrgContext'
 
 export default function NewOrganizationPage() {
+  const { t }         = useTranslation()
   const navigate      = useNavigate()
   const { addOrg }    = useOrg()
   const [name, setName]       = useState('')
@@ -31,12 +33,12 @@ export default function NewOrganizationPage() {
       <div style={{ maxWidth: 480 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
           <h2 style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)', fontSize: 'var(--text-xl)', color: 'var(--text-strong)', margin: 0 }}>
-            Nueva organización
+            {t('newOrganization.title')}
           </h2>
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-6)' }}>
-          Una organización agrupa las unidades Totem y los perfiles de cultivo de un mismo proyecto o instalación.
+          {t('newOrganization.description')}
         </p>
 
         {error && (
@@ -47,7 +49,7 @@ export default function NewOrganizationPage() {
 
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <Input
-            label="Nombre de la organización *"
+            label={t('newOrganization.nameLabel')}
             value={name}
             onChange={e => setName(e.target.value)}
             autoFocus
@@ -55,10 +57,10 @@ export default function NewOrganizationPage() {
           />
           <div style={{ display: 'flex', gap: 'var(--space-3)', paddingTop: 'var(--space-2)' }}>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Creando...' : 'Crear organización'}
+              {loading ? t('newOrganization.submitting') : t('newOrganization.submit')}
             </Button>
             <Button type="button" variant="ghost" onClick={() => navigate('/organizations')}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
           </div>
         </form>

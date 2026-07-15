@@ -1,13 +1,15 @@
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useOrg } from '../contexts/OrgContext'
 
 const SECTIONS = [
-  { id: 'units',    label: 'Unidades', path: '/units'    },
-  { id: 'profiles', label: 'Perfiles', path: '/profiles' },
-  { id: 'firmware', label: 'Firmware', path: '/firmware', adminOnly: true },
+  { id: 'units',    labelKey: 'nav.units',    path: '/units'    },
+  { id: 'profiles', labelKey: 'nav.profiles', path: '/profiles' },
+  { id: 'firmware', labelKey: 'nav.firmware', path: '/firmware', adminOnly: true },
 ]
 
 export default function Subnav() {
+  const { t }          = useTranslation()
   const { pathname }  = useLocation()
   const navigate      = useNavigate()
   const { activeOrg } = useOrg()
@@ -47,7 +49,7 @@ export default function Subnav() {
               transition: 'color var(--duration-base) var(--ease-standard), border-color var(--duration-base) var(--ease-standard)',
             }}
           >
-            {s.label}
+            {t(s.labelKey)}
           </button>
         )
       })}

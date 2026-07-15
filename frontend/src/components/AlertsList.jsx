@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Alert, Badge } from '../design-system'
 
@@ -10,9 +11,10 @@ function fmt(ts) {
 }
 
 const SEVERITY_TONE = { critical: 'danger', warning: 'warning' }
-const FILTER_OPTS = [['active', 'Activas'], ['resolved', 'Resueltas'], ['all', 'Todas']]
+const FILTER_OPTS = [['active', 'alertsList.filterActive'], ['resolved', 'alertsList.filterResolved'], ['all', 'alertsList.filterAll']]
 
 export default function AlertsList({ unitId, onResolved }) {
+  const { t } = useTranslation()
   const [alerts, setAlerts]     = useState([])
   const [filter, setFilter]     = useState('active')
   const [loading, setLoading]   = useState(true)
@@ -46,7 +48,7 @@ export default function AlertsList({ unitId, onResolved }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-5)' }}>
-        {FILTER_OPTS.map(([val, label]) => (
+        {FILTER_OPTS.map(([val, labelKey]) => (
           <button
             key={val}
             onClick={() => setFilter(val)}
@@ -60,15 +62,15 @@ export default function AlertsList({ unitId, onResolved }) {
               transition: 'all var(--duration-base) var(--ease-standard)',
             }}
           >
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>
 
-      {loading && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Cargando...</p>}
+      {loading && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>{t('alertsList.loading')}</p>}
       {error   && <Alert tone="danger" style={{ marginBottom: 'var(--space-4)' }}>{error}</Alert>}
       {!loading && alerts.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Sin alertas.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>{t('alertsList.noAlerts')}</p>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -98,7 +100,7 @@ export default function AlertsList({ unitId, onResolved }) {
               )}
               {a.resolved_at ? (
                 <p style={{ fontSize: 'var(--text-sm)', color: 'var(--green-600)', fontFamily: 'var(--font-body)' }}>
-                  Resuelta {fmt(a.resolved_at)}
+                  {t('alertsList.resolvedAt', { date: fmt(a.resolved_at) })}
                 </p>
               ) : (
                 <Button
@@ -108,7 +110,7 @@ export default function AlertsList({ unitId, onResolved }) {
                   disabled={resolving === a.id}
                   style={{ marginTop: 'var(--space-1)' }}
                 >
-                  {resolving === a.id ? 'Resolviendo...' : 'Marcar como resuelta'}
+                  {resolving === a.id ? t('alertsList.resolving') : t('alertsList.resolveButton')}
                 </Button>
               )}
             </Alert>

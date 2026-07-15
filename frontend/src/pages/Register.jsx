@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api, saveTokens } from '../api'
 import { Button, Input, Alert } from '../design-system'
 
 export default function Register() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -23,7 +25,7 @@ export default function Register() {
       } catch (loginErr) {
         // La cuenta se creó correctamente pero el login automático falló;
         // avisamos al usuario para que no interprete el salto como un error.
-        navigate('/login', { state: { info: 'Tu cuenta se creó correctamente. Inicia sesión para continuar.' } })
+        navigate('/login', { state: { info: t('auth.register.successRedirect') } })
       }
     } catch (err) {
       setError(err.message)
@@ -59,7 +61,7 @@ export default function Register() {
             letterSpacing: 'var(--tracking-caps)',
             display: 'block',
           }}>
-            TOTEM
+            {t('common.appName')}
           </span>
           <span style={{
             fontFamily: 'var(--font-body)',
@@ -68,7 +70,7 @@ export default function Register() {
             marginTop: 'var(--space-1)',
             display: 'block',
           }}>
-            Sistema aeropónico modular
+            {t('common.tagline')}
           </span>
         </div>
 
@@ -80,13 +82,13 @@ export default function Register() {
             color: 'var(--text-strong)',
             marginBottom: 'var(--space-1)',
           }}>
-            Crear cuenta
+            {t('auth.register.heading')}
           </h1>
 
           {error && <Alert tone="danger" onClose={() => setError(null)}>{error}</Alert>}
 
           <Input
-            label="Correo electrónico"
+            label={t('auth.register.email')}
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
@@ -94,24 +96,24 @@ export default function Register() {
             required
           />
           <Input
-            label="Contraseña"
+            label={t('auth.register.password')}
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             autoComplete="new-password"
             minLength={8}
-            hint="Mínimo 8 caracteres"
+            hint={t('auth.register.passwordHint')}
             required
           />
 
           <Button type="submit" fullWidth disabled={loading} style={{ marginTop: 'var(--space-2)' }}>
-            {loading ? 'Creando cuenta...' : 'Crear cuenta'}
+            {loading ? t('auth.register.submitting') : t('auth.register.submit')}
           </Button>
 
           <p style={{ textAlign: 'center', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-            ¿Ya tienes cuenta?{' '}
+            {t('auth.register.hasAccount')}{' '}
             <Link to="/login" style={{ color: 'var(--blue-700)', fontWeight: 'var(--weight-semibold)' }}>
-              Inicia sesión
+              {t('auth.register.loginLink')}
             </Link>
           </p>
         </form>

@@ -1,9 +1,11 @@
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Button, Card, Badge } from '../design-system'
 import AppShell from '../components/AppShell'
 import { useOrg } from '../contexts/OrgContext'
 
 export default function Organizations() {
+  const { t }         = useTranslation()
   const navigate      = useNavigate()
   const { orgs } = useOrg()
 
@@ -18,10 +20,10 @@ export default function Organizations() {
           fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
           fontSize: 'var(--text-xl)', color: 'var(--text-strong)',
         }}>
-          Gestionar organizaciones
+          {t('organizations.title')}
         </h2>
         <Button variant="primary" size="sm" onClick={() => navigate('/organizations/new')}>
-          + Nueva
+          {t('organizations.newButton')}
         </Button>
       </div>
 
@@ -32,10 +34,10 @@ export default function Organizations() {
           color: 'var(--text-muted)',
         }}>
           <p style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--text-base)' }}>
-            Aún no tienes organizaciones.
+            {t('organizations.noOrgs')}
           </p>
           <Button variant="primary" onClick={() => navigate('/organizations/new')}>
-            Crear primera organización
+            {t('organizations.createFirst')}
           </Button>
         </div>
       )}

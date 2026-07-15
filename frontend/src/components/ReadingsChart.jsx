@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 
 const SENSORS = [
-  { key: 'temperature', label: 'Temperatura',   unit: '°C',   color: 'var(--teal-500)',      hex: '#00A99D' },
-  { key: 'humidity',    label: 'Humedad',        unit: '% RH', color: 'var(--blue-700)',      hex: '#0077AA' },
-  { key: 'light',       label: 'Luz PAR',        unit: 'µmol', color: 'var(--lime-500)',      hex: '#8DC44A' },
+  { key: 'temperature', labelKey: 'readingsChart.temperature', unit: '°C',   color: 'var(--teal-500)',      hex: '#00A99D' },
+  { key: 'humidity',    labelKey: 'readingsChart.humidity',    unit: '% RH', color: 'var(--blue-700)',      hex: '#0077AA' },
+  { key: 'light',       labelKey: 'readingsChart.light',       unit: 'µmol', color: 'var(--lime-500)',      hex: '#8DC44A' },
   // Sensores de gas — conteo crudo del ADC (0-4095), sin calibrar todavía.
-  { key: 'air_quality', label: 'Calidad aire',   unit: 'ADC',  color: 'var(--status-warning)', hex: '#E0A52B' },
-  { key: 'methane',     label: 'Metano',         unit: 'ADC',  color: 'var(--status-danger)',  hex: '#C4453B' },
+  { key: 'air_quality', labelKey: 'readingsChart.airQuality',  unit: 'ADC',  color: 'var(--status-warning)', hex: '#E0A52B' },
+  { key: 'methane',     labelKey: 'readingsChart.methane',     unit: 'ADC',  color: 'var(--status-danger)',  hex: '#C4453B' },
 ]
 
 // Rangos hacia atrás que el usuario puede elegir. `limit` sube con el rango para
@@ -44,6 +45,7 @@ function fmtSpan(fromTs, toTs) {
 }
 
 export default function ReadingsChart({ unitId }) {
+  const { t } = useTranslation()
   const [rows, setRows]       = useState([])
   const [sensor, setSensor]   = useState('temperature')
   const [range, setRange]     = useState('24h')
@@ -96,7 +98,7 @@ export default function ReadingsChart({ unitId }) {
                 transition: 'all var(--duration-base) var(--ease-standard)',
               }}
             >
-              {s.label}
+              {t(s.labelKey)}
             </button>
           )
         })}
@@ -121,7 +123,7 @@ export default function ReadingsChart({ unitId }) {
                 fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
                 fontSize: 'var(--text-base)', color: 'var(--text-strong)',
               }}>
-                {current.label} <span style={{ color: 'var(--text-muted)', fontWeight: 'var(--weight-regular)' }}>· {current.unit}</span>
+                {t(current.labelKey)} <span style={{ color: 'var(--text-muted)', fontWeight: 'var(--weight-regular)' }}>· {current.unit}</span>
               </div>
               {hasData && (
                 <div style={{
@@ -139,13 +141,13 @@ export default function ReadingsChart({ unitId }) {
           <div style={{ height: 240, position: 'relative' }}>
             {loading && (
               <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', margin: 0 }}>
-                Cargando...
+                {t('readingsChart.loading')}
               </p>
             )}
 
             {!loading && !hasData && (
               <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', margin: 0, textAlign: 'center', padding: '0 var(--space-4)' }}>
-                Sin lecturas de {current.label.toLowerCase()} en este rango.
+                {t('readingsChart.noData', { sensor: t(current.labelKey).toLowerCase() })}
               </p>
             )}
 
@@ -181,7 +183,7 @@ export default function ReadingsChart({ unitId }) {
                     labelStyle={{ color: '#5a6675', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11 }}
                     itemStyle={{ color: current.hex }}
                     labelFormatter={fmtFull}
-                    formatter={v => [`${v} ${current.unit}`, current.label]}
+                    formatter={v => [`${v} ${current.unit}`, t(current.labelKey)]}
                   />
                   <Line
                     type="monotone"

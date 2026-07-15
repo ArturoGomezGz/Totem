@@ -1,9 +1,8 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Card, Alert, Input, Badge, Select } from '../design-system'
 import ProvisioningPanel from './ProvisioningPanel'
-
-const TYPE_LABEL = { totem: 'Totem', supply_tank: 'Tanque de suministro' }
 
 const eyebrow = {
   fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
@@ -34,6 +33,7 @@ const iconBtn = {
 }
 
 export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange }) {
+  const { t } = useTranslation()
   const [editingName, setEditingName] = useState(false)
   const [name, setName]             = useState(unit.name)
   const [nameSaving, setNameSaving] = useState(false)
@@ -77,7 +77,7 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
     try {
       const res = await api.assignProfile(unit.id, selectedProfileId || null)
       onUnitChange?.({ ...unit, active_profile_id: selectedProfileId || null })
-      setAssignMsg(res?.detail ?? 'Perfil asignado')
+      setAssignMsg(res?.detail ?? t('unitSettings.profileAssigned'))
     } catch (err) {
       setAssignError(err.message)
     } finally {
@@ -115,9 +115,9 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)', maxWidth: 560 }}>
 
       <Card>
-        <span style={eyebrow}>Información del dispositivo</span>
+        <span style={eyebrow}>{t('unitSettings.deviceInfo')}</span>
 
-        <InfoRow label="Nombre">
+        <InfoRow label={t('unitSettings.name')}>
           {editingName ? (
             <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flex: 1, justifyContent: 'flex-end' }}>
               <Input
@@ -126,50 +126,50 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
                 onKeyDown={e => { if (e.key === 'Enter' && !nameSaving && name.trim()) saveName() }}
               />
               <button
-                aria-label="Guardar nombre" title="Guardar"
+                aria-label={t('common.saveName')} title={t('common.save')}
                 style={{ ...iconBtn, color: 'var(--blue-700)', opacity: nameSaving || !name.trim() ? 0.5 : 1 }}
                 disabled={nameSaving || !name.trim()}
                 onClick={saveName}
               >
                 ✓
               </button>
-              <button aria-label="Cancelar" title="Cancelar" style={iconBtn} onClick={cancelEditName}>
+              <button aria-label={t('organizationSettings.cancelEdit')} title={t('organizationSettings.cancelEdit')} style={iconBtn} onClick={cancelEditName}>
                 ×
               </button>
             </div>
           ) : (
             <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>{unit.name}</span>
-              <button aria-label="Editar nombre" title="Editar nombre" style={iconBtn} onClick={() => setEditingName(true)}>
+              <button aria-label={t('common.editName')} title={t('common.editName')} style={iconBtn} onClick={() => setEditingName(true)}>
                 ✎
               </button>
             </span>
           )}
         </InfoRow>
 
-        <InfoRow label="ID" value={unit.id} mono />
-        <InfoRow label="Tipo" value={TYPE_LABEL[unit.type] ?? unit.type} />
-        <InfoRow label="Creada" value={new Date(unit.created_at).toLocaleString('es')} />
-        <InfoRow label="Última conexión" value={unit.last_seen ? new Date(unit.last_seen).toLocaleString('es') : 'Nunca'} />
-        <InfoRow label="Firmware" value={unit.firmware_version ?? 'Desconocida'} />
+        <InfoRow label={t('unitSettings.id')} value={unit.id} mono />
+        <InfoRow label={t('unitSettings.type')} value={t(`unitType.${unit.type}`, { defaultValue: unit.type })} />
+        <InfoRow label={t('unitSettings.created')} value={new Date(unit.created_at).toLocaleString('es')} />
+        <InfoRow label={t('unitSettings.lastConnection')} value={unit.last_seen ? new Date(unit.last_seen).toLocaleString('es') : t('unitSettings.never')} />
+        <InfoRow label={t('unitSettings.firmware')} value={unit.firmware_version ?? t('unitSettings.unknown')} />
 
         {nameError && <Alert tone="danger" style={{ marginTop: 'var(--space-3)' }}>{nameError}</Alert>}
       </Card>
 
       {unit.type === 'totem' && (
         <Card>
-          <span style={eyebrow}>Perfil de cultivo activo</span>
+          <span style={eyebrow}>{t('unitSettings.activeProfile')}</span>
           <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-end' }}>
             <Select
               style={{ flex: 1 }}
               value={selectedProfileId}
               onChange={e => { setSelectedProfileId(e.target.value); setAssignMsg(null); setAssignError(null) }}
             >
-              <option value="">Sin perfil</option>
+              <option value="">{t('unitSettings.noProfile')}</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </Select>
             <Button variant="primary" size="md" onClick={handleAssignProfile} disabled={assignLoading} style={{ flexShrink: 0 }}>
-              {assignLoading ? '...' : 'Asignar'}
+              {assignLoading ? t('unitSettings.assigning') : t('unitSettings.assign')}
             </Button>
           </div>
           {assignMsg   && <Alert tone="success" style={{ marginTop: 'var(--space-3)' }}>{assignMsg}</Alert>}
@@ -178,30 +178,28 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
       )}
 
       <Card>
-        <span style={eyebrow}>API Key</span>
+        <span style={eyebrow}>{t('unitSettings.apiKey')}</span>
         {regeneratedKey ? (
           <ProvisioningPanel unitId={unit.id} apiKey={regeneratedKey} />
         ) : (
           <>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-              Si perdiste la API Key o sospechas que se filtró, puedes regenerarla. La clave anterior
-              deja de funcionar de inmediato — el dispositivo se desconectará hasta que lo reprovisiones
-              con la nueva.
+              {t('unitSettings.regenerateHint')}
             </p>
             {!regenerateConfirm ? (
               <Button variant="outline" size="sm" onClick={() => setRegenerateConfirm(true)}>
-                Regenerar API Key
+                {t('unitSettings.regenerateButton')}
               </Button>
             ) : (
               <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>
-                  ¿Confirmas? Esto invalida la clave actual.
+                  {t('unitSettings.confirmRegenerate')}
                 </span>
                 <Button variant="primary" size="sm" disabled={regenerating} onClick={doRegenerate}>
-                  {regenerating ? 'Regenerando...' : 'Sí, regenerar'}
+                  {regenerating ? t('unitSettings.regenerating') : t('unitSettings.confirmRegenerateButton')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setRegenerateConfirm(false)}>
-                  Cancelar
+                  {t('organizationSettings.cancelEdit')}
                 </Button>
               </div>
             )}
@@ -211,33 +209,32 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
       </Card>
 
       <Card accent="var(--status-danger)">
-        <span style={{ ...eyebrow, color: 'var(--status-danger)' }}>Zona de peligro</span>
+        <span style={{ ...eyebrow, color: 'var(--status-danger)' }}>{t('unitSettings.dangerZone')}</span>
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-          Dar de baja revoca el acceso MQTT del dispositivo de inmediato. El historial de lecturas,
-          eventos y alertas se conserva.
+          {t('unitSettings.deactivateHint')}
         </p>
         {!unit.is_active ? (
-          <Badge tone="neutral">Unidad dada de baja</Badge>
+          <Badge tone="neutral">{t('unitSettings.deactivated')}</Badge>
         ) : !deactivateConfirm ? (
           <Button
             variant="danger" size="sm"
             onClick={() => setDeactivateConfirm(true)}
           >
-            Dar de baja
+            {t('unitSettings.deactivateButton')}
           </Button>
         ) : (
           <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>
-              ¿Seguro? No se puede revertir desde el dashboard.
+              {t('unitSettings.confirmDeactivate')}
             </span>
             <Button
               variant="danger" size="sm" disabled={deactivating}
               onClick={doDeactivate}
             >
-              {deactivating ? '...' : 'Sí, dar de baja'}
+              {deactivating ? t('unitSettings.deactivating') : t('unitSettings.confirmDeactivateButton')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setDeactivateConfirm(false)}>
-              Cancelar
+              {t('organizationSettings.cancelEdit')}
             </Button>
           </div>
         )}

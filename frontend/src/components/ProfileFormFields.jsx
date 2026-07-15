@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Input, Select } from '../design-system'
 
 const eyebrow = {
@@ -7,18 +8,13 @@ const eyebrow = {
   marginBottom: 'var(--space-3)', display: 'block',
 }
 
-// Etiquetas legibles para claves conocidas de irrigation_params. Cualquier
-// clave nueva (de un método agregado al catálogo sin tocar el frontend) cae
-// al fallback humanizado — no bloquea agregar métodos vía el catálogo.
-const PARAM_LABELS = {
-  threshold_vpd_kpa: 'Umbral de VPD (kPa)',
-  cycle_duration_s: 'Duración del ciclo (s)',
-  base_duration_s: 'Duración base del ciclo (s)',
-  min_interval_s: 'Intervalo mínimo entre ciclos (s)',
-}
-
-function humanizeKey(key) {
-  return PARAM_LABELS[key] ?? key.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
+// Etiquetas legibles para claves conocidas de irrigation_params (ver
+// profileForm.paramLabels en los locales). Cualquier clave nueva (de un
+// método agregado al catálogo sin tocar el frontend) cae al fallback
+// humanizado — no bloquea agregar métodos vía el catálogo.
+function humanizeKey(key, t) {
+  const translated = t(`profileForm.paramLabels.${key}`, { defaultValue: '' })
+  return translated || key.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
 }
 
 export const EMPTY_PROFILE_FORM = {
@@ -54,14 +50,14 @@ export function toFloat(val) {
 // `methods` es el catálogo de GET /irrigation-methods (lo obtiene la página
 // contenedora) — se necesita aquí para saber qué claves de `form` pertenecen
 // a irrigation_params del método elegido.
-export function formToProfileBody(form, organization_id, methods) {
+export function formToProfileBody(form, organization_id, methods, t) {
   const method = methods.find(m => m.key === form.irrigation_method)
   const schemaProps = method?.params_schema?.properties ?? {}
 
   const irrigation_params = {}
   for (const key of Object.keys(schemaProps)) {
     const value = toFloat(form[key])
-    if (value === null) throw new Error(`Falta o no es numérico el parámetro "${humanizeKey(key)}"`)
+    if (value === null) throw new Error(t('profileForm.missingParamError', { param: humanizeKey(key, t) }))
     irrigation_params[key] = value
   }
 
@@ -80,6 +76,7 @@ export function formToProfileBody(form, organization_id, methods) {
 export default function ProfileFormFields({
   form, onChange, methods, methodsError, autoFocusName = false,
 }) {
+  const { t } = useTranslation()
   const handleChange = (field) => (e) => onChange(field, e.target.value)
 
   const selectedMethod = methods.find(m => m.key === form.irrigation_method)
@@ -88,35 +85,35 @@ export default function ProfileFormFields({
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-        <span style={eyebrow}>Identificación</span>
-        <Input label="Nombre *" value={form.name} onChange={handleChange('name')} autoFocus={autoFocusName} required />
-        <Input label="Especie" value={form.species} onChange={handleChange('species')} hint="Ej: Lactuca sativa, Ocimum basilicum" />
+        <span style={eyebrow}>{t('profileForm.identification')}</span>
+        <Input label={t('profileForm.nameLabel')} value={form.name} onChange={handleChange('name')} autoFocus={autoFocusName} required />
+        <Input label={t('profileForm.speciesLabel')} value={form.species} onChange={handleChange('species')} hint={t('profileForm.speciesHint')} />
       </div>
 
       <div>
-        <span style={eyebrow}>Rangos óptimos de sensores</span>
+        <span style={eyebrow}>{t('profileForm.sensorRanges')}</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--space-3)' }}>
-          <Input label="Temp. mínima (°C)"    value={form.temp_min}     onChange={handleChange('temp_min')}     type="number" step="any" />
-          <Input label="Temp. máxima (°C)"    value={form.temp_max}     onChange={handleChange('temp_max')}     type="number" step="any" />
-          <Input label="Humedad mínima (%)"   value={form.humidity_min} onChange={handleChange('humidity_min')} type="number" step="any" />
-          <Input label="Humedad máxima (%)"   value={form.humidity_max} onChange={handleChange('humidity_max')} type="number" step="any" />
-          <Input label="Luz mínima (PAR)"     value={form.light_min}    onChange={handleChange('light_min')}    type="number" step="any" />
-          <Input label="Luz máxima (PAR)"     value={form.light_max}    onChange={handleChange('light_max')}    type="number" step="any" />
+          <Input label={t('profileForm.tempMin')}     value={form.temp_min}     onChange={handleChange('temp_min')}     type="number" step="any" />
+          <Input label={t('profileForm.tempMax')}     value={form.temp_max}     onChange={handleChange('temp_max')}     type="number" step="any" />
+          <Input label={t('profileForm.humidityMin')} value={form.humidity_min} onChange={handleChange('humidity_min')} type="number" step="any" />
+          <Input label={t('profileForm.humidityMax')} value={form.humidity_max} onChange={handleChange('humidity_max')} type="number" step="any" />
+          <Input label={t('profileForm.lightMin')}    value={form.light_min}    onChange={handleChange('light_min')}    type="number" step="any" />
+          <Input label={t('profileForm.lightMax')}    value={form.light_max}    onChange={handleChange('light_max')}    type="number" step="any" />
         </div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-        <span style={eyebrow}>Parámetros de riego</span>
+        <span style={eyebrow}>{t('profileForm.irrigationParams')}</span>
 
         {methodsError && <p style={{ fontSize: 'var(--text-sm)', color: 'var(--status-danger)' }}>{methodsError}</p>}
 
         <Select
-          label="Método de riego *"
+          label={t('profileForm.methodLabel')}
           value={form.irrigation_method}
           onChange={handleChange('irrigation_method')}
           required
         >
-          <option value="">Selecciona un método</option>
+          <option value="">{t('profileForm.selectMethod')}</option>
           {methods.map(m => <option key={m.key} value={m.key}>{m.name}</option>)}
         </Select>
 
@@ -131,7 +128,7 @@ export default function ProfileFormFields({
             {paramKeys.map(key => (
               <Input
                 key={key}
-                label={`${humanizeKey(key)} *`}
+                label={`${humanizeKey(key, t)} *`}
                 value={form[key] ?? ''}
                 onChange={handleChange(key)}
                 type="number" step="any" required

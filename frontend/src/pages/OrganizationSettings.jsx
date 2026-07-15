@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Card, Alert, Input, Select, Badge } from '../design-system'
 import AppShell from '../components/AppShell'
@@ -29,6 +30,7 @@ function InfoRow({ label, value, children }) {
 }
 
 function RemoveMemberButton({ member, onRemoved }) {
+  const { t } = useTranslation()
   const [confirm, setConfirm]     = useState(false)
   const [removing, setRemoving]   = useState(false)
   const [error, setError]         = useState(null)
@@ -46,7 +48,7 @@ function RemoveMemberButton({ member, onRemoved }) {
   if (!confirm) {
     return (
       <Button variant="ghost" size="sm" style={{ color: 'var(--status-danger)' }} onClick={() => setConfirm(true)}>
-        Quitar
+        {t('organizationSettings.remove')}
       </Button>
     )
   }
@@ -54,9 +56,9 @@ function RemoveMemberButton({ member, onRemoved }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
       <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-        <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} disabled={removing}>Cancelar</Button>
+        <Button variant="ghost" size="sm" onClick={() => setConfirm(false)} disabled={removing}>{t('organizationSettings.cancelEdit')}</Button>
         <Button variant="danger" size="sm" onClick={doRemove} disabled={removing}>
-          {removing ? 'Quitando...' : 'Sí, quitar'}
+          {removing ? t('organizationSettings.removing') : t('organizationSettings.confirmRemove')}
         </Button>
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
@@ -65,6 +67,7 @@ function RemoveMemberButton({ member, onRemoved }) {
 }
 
 export default function OrganizationSettings() {
+  const { t }               = useTranslation()
   const { organizationId } = useParams()
   const navigate            = useNavigate()
   const { orgs, updateOrgName } = useOrg()
@@ -124,7 +127,7 @@ export default function OrganizationSettings() {
     try {
       await api.addMember(organizationId, email.trim(), role)
       setEmail(''); setRole('member')
-      setNotice('Miembro agregado.')
+      setNotice(t('organizationSettings.memberAdded'))
       await load()
     } catch (err) {
       setAddError(err.message)
@@ -136,7 +139,7 @@ export default function OrganizationSettings() {
   const handleRoleChange = async (member, newRole) => {
     try {
       await api.updateMemberRole(organizationId, member.user_id, newRole)
-      setNotice(`Rol de ${member.email} actualizado a ${newRole}.`)
+      setNotice(t('organizationSettings.roleUpdated', { email: member.email, role: newRole }))
       await load()
     } catch (err) {
       setError(err.message)
@@ -145,7 +148,7 @@ export default function OrganizationSettings() {
 
   const handleRemove = async (member) => {
     await api.removeMember(organizationId, member.user_id)
-    setNotice(`${member.email} ya no pertenece a esta organización.`)
+    setNotice(t('organizationSettings.memberRemoved', { email: member.email }))
     await load()
   }
 
@@ -153,7 +156,7 @@ export default function OrganizationSettings() {
     return (
       <AppShell>
         <Alert tone="danger">
-          Solo los administradores de la organización pueden ver esta página.
+          {t('organizationSettings.adminOnly')}
         </Alert>
       </AppShell>
     )
@@ -167,14 +170,14 @@ export default function OrganizationSettings() {
             fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
             fontSize: 'var(--text-xl)', color: 'var(--text-strong)', margin: 0,
           }}>
-            Configuración de organización
+            {t('organizationSettings.title')}
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
             <button
               onClick={() => navigate('/organizations')}
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-muted)', textDecoration: 'underline', fontSize: 'inherit' }}
             >
-              ← Volver a organizaciones
+              {t('organizationSettings.back')}
             </button>
           </p>
         </div>
@@ -193,8 +196,8 @@ export default function OrganizationSettings() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
 
           <Card>
-            <span style={eyebrow}>Información de la organización</span>
-            <InfoRow label="Nombre">
+            <span style={eyebrow}>{t('organizationSettings.orgInfo')}</span>
+            <InfoRow label={t('organizationSettings.name')}>
               {editingName ? (
                 <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flex: 1, justifyContent: 'flex-end' }}>
                   <Input
@@ -203,21 +206,21 @@ export default function OrganizationSettings() {
                     onKeyDown={e => { if (e.key === 'Enter' && !nameSaving && name.trim()) saveName() }}
                   />
                   <button
-                    aria-label="Guardar nombre" title="Guardar"
+                    aria-label={t('common.saveName')} title={t('common.save')}
                     style={{ ...iconBtn, color: 'var(--blue-700)', opacity: nameSaving || !name.trim() ? 0.5 : 1 }}
                     disabled={nameSaving || !name.trim()}
                     onClick={saveName}
                   >
                     ✓
                   </button>
-                  <button aria-label="Cancelar" title="Cancelar" style={iconBtn} onClick={cancelEditName}>
+                  <button aria-label={t('organizationSettings.cancelEdit')} title={t('organizationSettings.cancelEdit')} style={iconBtn} onClick={cancelEditName}>
                     ×
                   </button>
                 </div>
               ) : (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                   <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>{org?.name}</span>
-                  <button aria-label="Editar nombre" title="Editar nombre" style={iconBtn} onClick={() => setEditingName(true)}>
+                  <button aria-label={t('common.editName')} title={t('common.editName')} style={iconBtn} onClick={() => setEditingName(true)}>
                     ✎
                   </button>
                 </span>
@@ -227,29 +230,28 @@ export default function OrganizationSettings() {
           </Card>
 
           <Card>
-            <span style={eyebrow}>Agregar miembro</span>
+            <span style={eyebrow}>{t('organizationSettings.addMember')}</span>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-              Solo puedes agregar usuarios que ya tengan una cuenta en Totem — pídele a la persona que se registre
-              primero con el email que vas a usar aquí.
+              {t('organizationSettings.addMemberHint')}
             </p>
             <form onSubmit={handleAdd} style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <Input
-                label="Email" placeholder="persona@ejemplo.com" style={{ flex: '2 1 260px' }}
+                label={t('organizationSettings.email')} placeholder={t('organizationSettings.emailPlaceholder')} style={{ flex: '2 1 260px' }}
                 value={email} onChange={e => setEmail(e.target.value)}
               />
-              <Select label="Rol" value={role} onChange={e => setRole(e.target.value)} style={{ flex: '1 1 140px' }}>
-                <option value="member">Miembro</option>
-                <option value="admin">Administrador</option>
+              <Select label={t('organizationSettings.role')} value={role} onChange={e => setRole(e.target.value)} style={{ flex: '1 1 140px' }}>
+                <option value="member">{t('organizationSettings.roleMember')}</option>
+                <option value="admin">{t('organizationSettings.roleAdmin')}</option>
               </Select>
               <Button type="submit" variant="primary" size="md" disabled={adding || !email.trim()}>
-                {adding ? 'Agregando...' : 'Agregar'}
+                {adding ? t('organizationSettings.adding') : t('organizationSettings.add')}
               </Button>
             </form>
             {addError && <Alert tone="danger" style={{ marginTop: 'var(--space-3)' }}>{addError}</Alert>}
           </Card>
 
           <div>
-            <span style={eyebrow}>Miembros</span>
+            <span style={eyebrow}>{t('organizationSettings.members')}</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               {members.map(member => (
                 <Card
@@ -268,8 +270,8 @@ export default function OrganizationSettings() {
                       onChange={e => handleRoleChange(member, e.target.value)}
                       style={{ minWidth: 140 }}
                     >
-                      <option value="member">Miembro</option>
-                      <option value="admin">Administrador</option>
+                      <option value="member">{t('organizationSettings.roleMember')}</option>
+                      <option value="admin">{t('organizationSettings.roleAdmin')}</option>
                     </Select>
                     <RemoveMemberButton member={member} onRemoved={handleRemove} />
                   </div>

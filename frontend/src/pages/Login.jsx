@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api, saveTokens } from '../api'
 import { Button, Input, Alert } from '../design-system'
 export default function Login() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail]       = useState('')
@@ -54,7 +56,7 @@ export default function Login() {
             letterSpacing: 'var(--tracking-caps)',
             display: 'block',
           }}>
-            TOTEM
+            {t('common.appName')}
           </span>
           <span style={{
             fontFamily: 'var(--font-body)',
@@ -63,7 +65,7 @@ export default function Login() {
             marginTop: 'var(--space-1)',
             display: 'block',
           }}>
-            Sistema aeropónico modular
+            {t('common.tagline')}
           </span>
         </div>
 
@@ -75,14 +77,14 @@ export default function Login() {
             color: 'var(--text-strong)',
             marginBottom: 'var(--space-1)',
           }}>
-            Iniciar sesión
+            {t('auth.login.heading')}
           </h1>
 
           {info && <Alert tone="success" onClose={() => setInfo(null)}>{info}</Alert>}
           {error && <Alert tone="danger" onClose={() => setError(null)}>{error}</Alert>}
 
           <Input
-            label="Correo electrónico"
+            label={t('auth.login.email')}
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
@@ -90,7 +92,7 @@ export default function Login() {
             required
           />
           <Input
-            label="Contraseña"
+            label={t('auth.login.password')}
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
@@ -99,13 +101,13 @@ export default function Login() {
           />
 
           <Button type="submit" fullWidth disabled={loading} style={{ marginTop: 'var(--space-2)' }}>
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? t('auth.login.submitting') : t('auth.login.submit')}
           </Button>
 
           <p style={{ textAlign: 'center', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-            ¿No tienes cuenta?{' '}
+            {t('auth.login.noAccount')}{' '}
             <Link to="/register" style={{ color: 'var(--blue-700)', fontWeight: 'var(--weight-semibold)' }}>
-              Regístrate
+              {t('auth.login.registerLink')}
             </Link>
           </p>
         </form>

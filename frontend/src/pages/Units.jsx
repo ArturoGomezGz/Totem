@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Card, Badge, Alert, StatusDot } from '../design-system'
 import AppShell from '../components/AppShell'
@@ -9,9 +10,8 @@ import { OFFLINE_MS } from '../hooks/useUnitWebSocket'
 const isUnitOnline = (unit) =>
   !!unit.last_seen && Date.now() - new Date(unit.last_seen).getTime() <= OFFLINE_MS
 
-const TYPE_LABEL = { totem: 'Totem', supply_tank: 'Tanque de suministro' }
-
 export default function Units() {
+  const { t }                      = useTranslation()
   const navigate                   = useNavigate()
   const { activeOrgId, activeOrg } = useOrg()
 
@@ -48,10 +48,10 @@ export default function Units() {
           border: '1px dashed var(--border-default)', borderRadius: 'var(--radius-md)',
         }}>
           <p style={{ fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)', fontSize: 'var(--text-base)', color: 'var(--text-strong)', marginBottom: 'var(--space-2)' }}>
-            Sin organización activa
+            {t('common.noOrganizationActive')}
           </p>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-            Selecciona una organización en el menú de la barra superior para ver las unidades.
+            {t('units.selectOrgHint')}
           </p>
         </div>
       </AppShell>
@@ -66,7 +66,7 @@ export default function Units() {
             fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-bold)',
             fontSize: 'var(--text-xl)', color: 'var(--text-strong)',
           }}>
-            Unidades
+            {t('units.title')}
           </h2>
           {activeOrg && (
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
@@ -75,7 +75,7 @@ export default function Units() {
           )}
         </div>
         <Button variant="primary" size="sm" onClick={() => navigate('/units/new')}>
-          + Registrar
+          {t('units.registerButton')}
         </Button>
       </div>
 
@@ -92,10 +92,10 @@ export default function Units() {
           color: 'var(--text-muted)',
         }}>
           <p style={{ marginBottom: 'var(--space-4)', fontSize: 'var(--text-base)' }}>
-            No hay unidades registradas en esta organización.
+            {t('units.noUnits')}
           </p>
           <Button variant="primary" onClick={() => navigate('/units/new')}>
-            Registrar primera unidad
+            {t('units.registerFirst')}
           </Button>
         </div>
       )}
@@ -116,20 +116,20 @@ export default function Units() {
               }}>
                 <StatusDot
                   tone={isUnitOnline(unit) ? 'success' : 'neutral'}
-                  title={isUnitOnline(unit) ? 'En línea' : 'Sin señal'}
+                  title={isUnitOnline(unit) ? t('units.online') : t('units.offline')}
                 />
                 {unit.name}
               </p>
               <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
-                <Badge tone="neutral">{TYPE_LABEL[unit.type] ?? unit.type}</Badge>
+                <Badge tone="neutral">{t(`unitType.${unit.type}`, { defaultValue: unit.type })}</Badge>
                 {unit.type === 'totem' && (
                   <Badge tone={unit.active_profile_id ? 'blue' : 'warning'}>
-                    {unit.active_profile_id ? (profileName(unit.active_profile_id) ?? '...') : 'Sin perfil'}
+                    {unit.active_profile_id ? (profileName(unit.active_profile_id) ?? '...') : t('units.noProfile')}
                   </Badge>
                 )}
                 {alertCounts[unit.id] && (
                   <Badge tone={alertCounts[unit.id].hasCritical ? 'danger' : 'warning'}>
-                    {alertCounts[unit.id].count === 1 ? '1 alerta' : `${alertCounts[unit.id].count} alertas`}
+                    {t('units.alertCount', { count: alertCounts[unit.id].count })}
                   </Badge>
                 )}
               </div>
