@@ -21,6 +21,105 @@ function shortSha(sha) {
   return `${sha.slice(0, 8)}…${sha.slice(-6)}`
 }
 
+// "1.2.3" → { major, minor, patch }. null si no es semver de tres números.
+function parseVersion(v) {
+  if (!v) return null
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(v).trim())
+  if (!m) return null
+  return { major: Number(m[1]), minor: Number(m[2]), patch: Number(m[3]) }
+}
+
+// Busca la actualización de patch disponible para una unidad: el release con el
+// patch más alto dentro de la MISMA línea major.minor que la versión reportada.
+// Los cambios de minor/major (p. ej. 1.2.x frente a 1.1.x) se ignoran a
+// propósito — son versiones con funcionalidades distintas, posiblemente
+// incompatibles, y no cuentan como "actualización pendiente". Devuelve null si
+// la unidad ya está al día en su línea o si la versión reportada no es semver.
+function findPatchUpdate(reportedVersion, releases) {
+  const reported = parseVersion(reportedVersion)
+  if (!reported) return null
+  let best = null
+  let bestPatch = reported.patch
+  for (const r of releases) {
+    const rv = parseVersion(r.version)
+    if (!rv) continue
+    if (rv.major !== reported.major || rv.minor !== reported.minor) continue
+    if (rv.patch > bestPatch) { best = r; bestPatch = rv.patch }
+  }
+  return best
+}
+
+// Una fila del panel "Estado por unidad": versión reportada, badge de estado
+// (Al día / Pendiente / Actualizando) y actualización directa a la última patch
+// compatible de su línea major.minor.
+function UnitVersionRow({ unit, releases, onDeployed }) {
+  const [confirming, setConfirming] = useState(false)
+  const [updating, setUpdating]     = useState(false)
+  const [error, setError]           = useState(null)
+
+  const target      = releases.find(r => r.id === unit.target_firmware_release_id)
+  const reported    = parseVersion(unit.firmware_version)
+  const patchUpdate = findPatchUpdate(unit.firmware_version, releases)
+  // Si el objetivo pendiente ya es la actualización de patch disponible, la
+  // unidad ya la está recibiendo — no volvemos a ofrecer el botón.
+  const updateInFlight = patchUpdate && target && target.id === patchUpdate.id
+
+  const doUpdate = async () => {
+    setUpdating(true); setError(null)
+    try {
+      await api.deployFirmware(patchUpdate.id, { unit_id: unit.id })
+      onDeployed(`Actualización a v${patchUpdate.version} aplicada a ${unit.name}.`)
+    } catch (err) {
+      setError(err.message)
+      setUpdating(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>{unit.name}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+            Reportada: {unit.firmware_version ?? 'Desconocida'}
+            {target && target.version !== unit.firmware_version && (
+              <> · Objetivo: v{target.version}</>
+            )}
+          </span>
+          {reported && (
+            patchUpdate
+              ? (updateInFlight
+                  ? <Badge tone="neutral">Actualizando a v{patchUpdate.version}</Badge>
+                  : <Badge tone="warning">Pendiente v{patchUpdate.version}</Badge>)
+              : <Badge tone="success">Al día</Badge>
+          )}
+          {patchUpdate && !updateInFlight && !confirming && (
+            <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+              Actualizar
+            </Button>
+          )}
+        </div>
+      </div>
+      {confirming && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', alignItems: 'flex-end' }}>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', textAlign: 'right' }}>
+            Se aplicará v{patchUpdate.version} solo a {unit.name}.
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)} disabled={updating}>
+              Cancelar
+            </Button>
+            <Button variant="primary" size="sm" onClick={doUpdate} disabled={updating}>
+              {updating ? 'Aplicando...' : `Actualizar a v${patchUpdate.version}`}
+            </Button>
+          </div>
+          {error && <Alert tone="danger" style={{ width: '100%' }}>{error}</Alert>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DeployRow({ release, units, open, onOpen, onClose, onDeployed }) {
   const [scope, setScope]         = useState('org')
   const [unitId, setUnitId]       = useState(units[0]?.id ?? '')
@@ -232,8 +331,6 @@ export default function Firmware() {
     )
   }
 
-  const latestRelease = releases[0] ?? null
-
   return (
     <AppShell>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
@@ -322,29 +419,21 @@ export default function Firmware() {
       {units.length > 0 && (
         <Card style={{ marginBottom: 'var(--space-5)' }}>
           <span style={eyebrow}>Estado por unidad</span>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
+            Solo se marca como pendiente una actualización dentro de la misma línea de versión
+            (mismo <code>major.minor</code>). Un cambio de línea — p. ej. de 1.1.x a 1.2.x — trae
+            funcionalidades distintas y no se ofrece como actualización automática; aplícalo desde la
+            lista de versiones de abajo.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-            {units.map(unit => {
-              const target = releases.find(r => r.id === unit.target_firmware_release_id)
-              const upToDate = latestRelease && unit.firmware_version === latestRelease.version
-              return (
-                <div key={unit.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-strong)' }}>{unit.name}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-                      Reportada: {unit.firmware_version ?? 'Desconocida'}
-                      {target && target.version !== unit.firmware_version && (
-                        <> · Objetivo: v{target.version}</>
-                      )}
-                    </span>
-                    {latestRelease && (
-                      upToDate
-                        ? <Badge tone="success">Al día</Badge>
-                        : <Badge tone="warning">Pendiente v{latestRelease.version}</Badge>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+            {units.map(unit => (
+              <UnitVersionRow
+                key={unit.id}
+                unit={unit}
+                releases={releases}
+                onDeployed={msg => { setNotice(msg); load() }}
+              />
+            ))}
           </div>
         </Card>
       )}
