@@ -267,6 +267,8 @@ export default function Firmware() {
   // por release — evita estados combinados confusos en la misma card.
   const [activeAction, setActiveAction] = useState(null) // { releaseId, type: 'deploy' | 'delete' }
 
+  const [showVersionInfo, setShowVersionInfo] = useState(false)
+
   const load = async () => {
     if (!activeOrgId) return
     try {
@@ -418,13 +420,34 @@ export default function Firmware() {
 
       {units.length > 0 && (
         <Card style={{ marginBottom: 'var(--space-5)' }}>
-          <span style={eyebrow}>Estado por unidad</span>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
-            Solo se marca como pendiente una actualización dentro de la misma línea de versión
-            (mismo <code>major.minor</code>). Un cambio de línea — p. ej. de 1.1.x a 1.2.x — trae
-            funcionalidades distintas y no se ofrece como actualización automática; aplícalo desde la
-            lista de versiones de abajo.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+            <span style={{ ...eyebrow, marginBottom: 0 }}>Estado por unidad</span>
+            <button
+              type="button"
+              onClick={() => setShowVersionInfo(v => !v)}
+              aria-label="Cómo se calcula el estado de actualización"
+              aria-expanded={showVersionInfo}
+              title="Cómo se calcula el estado de actualización"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 18, height: 18, borderRadius: '50%', cursor: 'pointer',
+                border: '1px solid var(--border-default)', background: 'transparent',
+                color: showVersionInfo ? 'var(--text-strong)' : 'var(--text-muted)',
+                fontFamily: 'var(--font-display)', fontSize: 11, fontStyle: 'italic',
+                fontWeight: 'var(--weight-bold)', lineHeight: 1, padding: 0,
+              }}
+            >
+              i
+            </button>
+          </div>
+          {showVersionInfo && (
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
+              Solo se marca como pendiente una actualización dentro de la misma línea de versión
+              (mismo <code>major.minor</code>). Un cambio de línea — p. ej. de 1.1.x a 1.2.x — trae
+              funcionalidades distintas y no se ofrece como actualización automática; aplícalo desde la
+              lista de versiones de abajo.
+            </p>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             {units.map(unit => (
               <UnitVersionRow
