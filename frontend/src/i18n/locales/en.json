@@ -19,6 +19,7 @@
     "supply_tank": "Supply tank"
   },
   "nav": {
+    "overview": "Overview",
     "units": "Units",
     "profiles": "Profiles",
     "firmware": "Firmware",
@@ -87,6 +88,22 @@
       "languageEn": "English"
     },
     "comingSoon": "Coming soon"
+  },
+  "overview": {
+    "title": "Overview",
+    "subtitle_one": "{{org}} · {{count}} totem",
+    "subtitle_other": "{{org}} · {{count}} totems",
+    "noTotems": "There are no totems in this organization.",
+    "noTotemsHint": "Register a totem to see its readings together here.",
+    "noSignal": "No signal from the device.",
+    "pumpOn": "Watering",
+    "pickAUnit": "Select at least one totem to compare.",
+    "comparing_one": "{{count}} totem on the chart",
+    "comparing_other": "{{count}} totems on the chart",
+    "capReached": "Up to {{max}} totems at a time",
+    "capHint": "Up to {{max}} totems at a time. Remove one to add another.",
+    "partialError_one": "Could not load history for {{count}} totem.",
+    "partialError_other": "Could not load history for {{count}} totems."
   },
   "units": {
     "title": "Units",

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useOrg } from '../contexts/OrgContext'
 
 const SECTIONS = [
+  { id: 'overview', labelKey: 'nav.overview', path: '/overview' },
   { id: 'units',    labelKey: 'nav.units',    path: '/units'    },
   { id: 'profiles', labelKey: 'nav.profiles', path: '/profiles' },
   { id: 'firmware', labelKey: 'nav.firmware', path: '/firmware', adminOnly: true },
