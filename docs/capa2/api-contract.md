@@ -13,7 +13,7 @@ La comunicación del sistema usa dos protocolos según el actor:
 
 | Topic | Descripción | QoS |
 |---|---|---|
-| `totem/{unit_id}/readings` | Lectura de sensores (T, RH, Li, calidad de aire, metano) | 1 |
+| `totem/{unit_id}/readings` | Lectura de sensores (T, RH, Li, calidad de aire, metano, CO₂) | 1 |
 | `totem/{unit_id}/events` | Estado del suministro + eventos de auditoría de actuador (ver payload abajo) | 1 |
 | `totem/{unit_id}/alerts` | Alerta crítica (tanque bajo, sensor desconectado, fallo de bomba) | 1 |
 | `totem/{unit_id}/status` | `{"firmware_version": "x.y.z"}` — retenido, publicado en cada conexión MQTT (incluyendo el reinicio tras un OTA). El server lo persiste en `Unit.firmware_version` | 1 |

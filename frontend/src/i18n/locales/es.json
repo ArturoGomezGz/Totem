@@ -238,6 +238,7 @@
     "sensorLight": "Luz PAR",
     "sensorAirQuality": "Calidad aire",
     "sensorMethane": "Metano",
+    "sensorCo2": "CO₂",
     "waitingDeviceData": "Esperando datos del dispositivo..."
   },
   "readingsChart": {
@@ -246,6 +247,7 @@
     "light": "Luz PAR",
     "airQuality": "Calidad aire",
     "methane": "Metano",
+    "co2": "CO₂",
     "loading": "Cargando...",
     "noData": "Sin lecturas de {{sensor}} en este rango."
   },

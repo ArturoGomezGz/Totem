@@ -1,0 +1,20 @@
+# Copiar a sdkconfig.defaults y ajustar los valores.
+# Este archivo NO debe contener credenciales reales.
+# sdkconfig.defaults está en .gitignore — nunca committear credenciales.
+
+# Tabla de particiones personalizada con soporte OTA — debe coincidir con
+# la de firmware/bootstrap, firmware/simulator y firmware/genesis (mismo layout
+# de particiones ota_0/ota_1) para que una unidad flasheada con bootstrap pueda
+# recibir por OTA cualquier versión publicada de este firmware.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# partitions.csv ocupa 4MB exactos (nvs+otadata+ota_0+ota_1+spiffs) — el
+# default de ESP-IDF es 2MB, insuficiente.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Rollback automático: si un OTA no llega a confirmarse (ver
+# totem_core — totem_rollback.c), el bootloader revierte solo a la partición
+# anterior conocida como válida.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y

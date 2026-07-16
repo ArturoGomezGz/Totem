@@ -10,6 +10,8 @@ const SENSORS = [
   // Sensores de gas — conteo crudo del ADC (0-4095), sin calibrar todavía.
   { key: 'air_quality', labelKey: 'readingsChart.airQuality',  unit: 'ADC',  color: 'var(--status-warning)', hex: '#E0A52B' },
   { key: 'methane',     labelKey: 'readingsChart.methane',     unit: 'ADC',  color: 'var(--status-danger)',  hex: '#C4453B' },
+  // CO2 (Senseair S8, NDIR): ppm ya CALIBRADOS por el sensor, no conteo crudo.
+  { key: 'co2',         labelKey: 'readingsChart.co2',         unit: 'ppm',  color: '#7C5CBF',               hex: '#7C5CBF' },
 ]
 
 // Rangos hacia atrás que el usuario puede elegir. `limit` sube con el rango para

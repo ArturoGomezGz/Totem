@@ -108,6 +108,10 @@ class Reading(Base):
     # sensor. air_quality: Grove Air Quality v1.3; methane: MQ-4 (salida AO).
     air_quality: Mapped[Optional[float]] = mapped_column(Float)
     methane: Mapped[Optional[float]] = mapped_column(Float)
+    # co2: Senseair S8 (NDIR) por UART. A diferencia de los otros gases, NO es
+    # conteo crudo del ADC — son ppm ya CALIBRADOS por el sensor. Solo monitoreo
+    # (no alimenta la decisión de riego, que sigue siendo por VPD).
+    co2: Mapped[Optional[float]] = mapped_column(Float)
 
 
 class DeviceEvent(Base):

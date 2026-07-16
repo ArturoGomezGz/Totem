@@ -19,6 +19,7 @@ const SENSOR_ACCENTS = {
   light:       'var(--lime-500)',
   air_quality: 'var(--status-warning)',
   methane:     'var(--status-danger)',
+  co2:         '#7C5CBF',
 }
 
 export default function UnitDetail() {
@@ -167,6 +168,7 @@ export default function UnitDetail() {
                 <StatCard value={r.light       != null ? `${r.light}`         : '—'} label={t('unitDetail.sensorLight')}       accent={SENSOR_ACCENTS.light}       />
                 <StatCard value={r.air_quality != null ? `${r.air_quality}`   : '—'} label={t('unitDetail.sensorAirQuality')}  accent={SENSOR_ACCENTS.air_quality} />
                 <StatCard value={r.methane     != null ? `${r.methane}`       : '—'} label={t('unitDetail.sensorMethane')}        accent={SENSOR_ACCENTS.methane}     />
+                <StatCard value={r.co2         != null ? `${r.co2} ppm`     : '—'} label={t('unitDetail.sensorCo2')}            accent={SENSOR_ACCENTS.co2}         />
               </div>
             </div>
           ) : (

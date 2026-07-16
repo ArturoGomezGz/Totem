@@ -24,6 +24,7 @@ class ReadingsSnapshot(BaseModel):
     light: Optional[float] = None
     air_quality: Optional[float] = None
     methane: Optional[float] = None
+    co2: Optional[float] = None
     timestamp: Optional[str] = None
 
 
@@ -69,6 +70,7 @@ class ReadingOut(BaseModel):
     light: Optional[float] = None
     air_quality: Optional[float] = None
     methane: Optional[float] = None
+    co2: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
