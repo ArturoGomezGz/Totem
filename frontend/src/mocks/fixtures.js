@@ -9,15 +9,18 @@ const round1     = (n) => Math.round(n * 10) / 10
 // después, así que solo tienen histórico en las últimas `gasSinceH` horas —
 // antes llegan como null. Reproduce el caso real donde un sensor tiene menos
 // registro que los demás y la gráfica debe ajustarse a su propio tramo.
-export function genReadings(hours = 24 * 30, stepMin = 20, gasSinceH = 8) {
+// `bias`: desplaza el punto de partida de temperatura/humedad para que cada
+// unidad simulada tenga su propia curva. Sin esto todos los totems generan
+// series casi idénticas y la gráfica comparativa no muestra nada útil.
+export function genReadings(hours = 24 * 30, stepMin = 20, gasSinceH = 8, bias = 0) {
   const steps = Math.floor((hours * 60) / stepMin)
   const now = Date.now()
   const points = []
-  let temp = 21, hum = 62
+  let temp = 21 + bias, hum = 62 - bias * 2
 
   for (let i = steps; i >= 0; i--) {
     const ts = new Date(now - i * stepMin * 60_000)
-    temp = Math.min(29, Math.max(18, temp + (Math.random() - 0.5) * 1.2))
+    temp = Math.min(29 + bias, Math.max(18 + bias, temp + (Math.random() - 0.5) * 1.2))
     hum  = Math.min(85, Math.max(45, hum  + (Math.random() - 0.5) * 3))
     const h = ts.getHours()
     const light = h >= 7 && h <= 19 ? 200 + Math.random() * 250 : Math.random() * 20
@@ -61,6 +64,33 @@ export function seedUnits() {
       id: 'unit-totem-2', organization_id: 'org-demo', type: 'totem', name: 'Totem Sur',
       is_active: true, firmware_version: null, last_seen: null,
       created_at: hoursAgo(2), active_profile_id: null,
+      target_firmware_release_id: null,
+    },
+    // Totems 3-6: existen para que la vista general se pueda desarrollar con
+    // varias series a la vez (tope de comparación, orden de offline, colisión de
+    // colores). 'Totem Poniente' queda sin señal a propósito.
+    {
+      id: 'unit-totem-3', organization_id: 'org-demo', type: 'totem', name: 'Totem Este',
+      is_active: true, firmware_version: '1.0.0', last_seen: new Date().toISOString(),
+      created_at: hoursAgo(24 * 12), active_profile_id: 'profile-albahaca',
+      target_firmware_release_id: 'fw-release-2',
+    },
+    {
+      id: 'unit-totem-4', organization_id: 'org-demo', type: 'totem', name: 'Totem Oeste',
+      is_active: true, firmware_version: '1.0.0', last_seen: new Date().toISOString(),
+      created_at: hoursAgo(24 * 11), active_profile_id: 'profile-lechuga',
+      target_firmware_release_id: 'fw-release-2',
+    },
+    {
+      id: 'unit-totem-5', organization_id: 'org-demo', type: 'totem', name: 'Totem Central',
+      is_active: true, firmware_version: '0.9.2', last_seen: new Date().toISOString(),
+      created_at: hoursAgo(24 * 9), active_profile_id: 'profile-albahaca',
+      target_firmware_release_id: null,
+    },
+    {
+      id: 'unit-totem-6', organization_id: 'org-demo', type: 'totem', name: 'Totem Poniente',
+      is_active: true, firmware_version: '0.9.2', last_seen: hoursAgo(6),
+      created_at: hoursAgo(24 * 6), active_profile_id: 'profile-lechuga',
       target_firmware_release_id: null,
     },
     {
@@ -182,6 +212,13 @@ export function seedReadings() {
   return {
     'unit-totem-1': genReadings(),
     'unit-totem-2': [],
+    'unit-totem-3': genReadings(24 * 30, 20, 8, 2.5),
+    'unit-totem-4': genReadings(24 * 30, 20, 8, -3),
+    'unit-totem-5': genReadings(24 * 30, 20, 8, 5),
+    // Sin señal desde hace 6 h: tiene histórico, pero se corta ahí.
+    'unit-totem-6': genReadings(24 * 30, 20, 8, -1.5).filter(
+      r => Date.now() - new Date(r.timestamp).getTime() > 6 * 3600_000
+    ),
     'unit-tank-1': genReadings(24, 60),
   }
 }
@@ -193,11 +230,27 @@ export function seedLiveState() {
       readings: { temperature: 22.1, humidity: 61.4, light: 310, air_quality: 165, methane: 320, co2: 780, timestamp: new Date().toISOString() },
       last_seen: new Date().toISOString(),
     },
+    'unit-totem-3': {
+      pump_state: 'on',
+      readings: { temperature: 24.6, humidity: 57.2, light: 295, air_quality: 172, methane: 331, co2: 910, timestamp: new Date().toISOString() },
+      last_seen: new Date().toISOString(),
+    },
+    'unit-totem-4': {
+      pump_state: 'off',
+      readings: { temperature: 19.3, humidity: 68.9, light: 260, air_quality: 158, methane: 305, co2: 640, timestamp: new Date().toISOString() },
+      last_seen: new Date().toISOString(),
+    },
+    'unit-totem-5': {
+      pump_state: 'off',
+      readings: { temperature: 26.8, humidity: 52.5, light: 340, air_quality: 181, methane: 344, co2: 1120, timestamp: new Date().toISOString() },
+      last_seen: new Date().toISOString(),
+    },
     'unit-tank-1': {
       pump_state: 'off',
       readings: { temperature: 24.0, humidity: 58.0, light: null, air_quality: null, methane: null, co2: null, timestamp: minutesAgo(2) },
       last_seen: minutesAgo(2),
     },
+    // unit-totem-6 sin entrada viva: perdió señal hace 6 h (ver seedUnits).
     // unit-totem-2 deliberadamente sin entrada: simula un dispositivo recién
     // registrado que todavía no ha publicado nada ("Esperando datos...").
   }

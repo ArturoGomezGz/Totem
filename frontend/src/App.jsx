@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import Overview from './pages/Overview'
 import Units from './pages/Units'
 import NewUnitPage from './pages/NewUnitPage'
 import UnitDetail from './pages/UnitDetail'
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/register" element={<Register />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path="/overview"                 element={<Overview />} />
           <Route path="/units"                    element={<Units />} />
           <Route path="/units/new"                element={<NewUnitPage />} />
           <Route path="/units/:unitId"            element={<UnitDetail />} />

@@ -19,6 +19,7 @@
     "supply_tank": "Tanque de suministro"
   },
   "nav": {
+    "overview": "Vista general",
     "units": "Unidades",
     "profiles": "Perfiles",
     "firmware": "Firmware",
@@ -87,6 +88,22 @@
       "languageEn": "Inglés"
     },
     "comingSoon": "Próximamente"
+  },
+  "overview": {
+    "title": "Vista general",
+    "subtitle_one": "{{org}} · {{count}} totem",
+    "subtitle_other": "{{org}} · {{count}} totems",
+    "noTotems": "No hay totems en esta organización.",
+    "noTotemsHint": "Registra un totem para ver aquí sus lecturas en conjunto.",
+    "noSignal": "Sin señal del dispositivo.",
+    "pumpOn": "Regando",
+    "pickAUnit": "Selecciona al menos un totem para comparar.",
+    "comparing_one": "{{count}} totem en la gráfica",
+    "comparing_other": "{{count}} totems en la gráfica",
+    "capReached": "Máximo {{max}} totems a la vez",
+    "capHint": "Máximo {{max}} totems a la vez. Quita uno para añadir otro.",
+    "partialError_one": "No se pudo cargar el histórico de {{count}} totem.",
+    "partialError_other": "No se pudo cargar el histórico de {{count}} totems."
   },
   "units": {
     "title": "Unidades",
