@@ -6,11 +6,27 @@ import {
   seedOrganizations, seedUnits, seedProfiles,
   seedAlerts, seedEvents, seedReadings, seedLiveState,
   seedFirmwareReleases, seedMembers, seedIrrigationMethods,
+  seedMaintenance,
 } from './fixtures'
+
+const seededUnits       = seedUnits()
+const seededMaintenance = seedMaintenance()
+
+// Las ventanas abiertas viven en dos lugares (unit.maintenance y el historial
+// por unidad) igual que en el server, donde UnitOut.maintenance y
+// GET /maintenance salen de la misma fila. Aquí se comparte la referencia para
+// que cerrar una ventana desde la UI se refleje en ambas.
+for (const unit of seededUnits) {
+  if (unit.maintenance) {
+    seededMaintenance[unit.id] = [unit.maintenance, ...(seededMaintenance[unit.id] ?? [])]
+  } else {
+    unit.maintenance = null
+  }
+}
 
 export const store = {
   organizations: seedOrganizations(),
-  units: seedUnits(),
+  units: seededUnits,
   profiles: seedProfiles(),
   alerts: seedAlerts(),
   events: seedEvents(),
@@ -20,6 +36,11 @@ export const store = {
   firmwareReleases: seedFirmwareReleases(),
   members: seedMembers(),
   irrigationMethods: seedIrrigationMethods(),
+  // Usuario "logueado" en el entorno de mocks — el mock de login acepta
+  // cualquier credencial, así que se fija aquí para poder atribuir acciones
+  // (quién abrió una ventana de mantenimiento).
+  currentUser: { id: 'user-demo', email: 'admin@demo.com' },
+  maintenance: seededMaintenance, // unit_id -> ventanas, más reciente primero
 }
 
 const listeners = {} // unit_id -> Set<fn>
@@ -41,25 +62,42 @@ export function setLiveState(unitId, patch) {
 
 // Solo se activa en modo mock: el import de este módulo ocurre siempre
 // (import estático), pero el intervalo real no debe correr en modo normal.
+// Unidades que simulan un ESP32 conectado: reciben lecturas nuevas de forma
+// continua. Sin heartbeat, `last_seen` se congela en el arranque y la unidad
+// aparece "sin señal" a los 35 s (OFFLINE_MS) — lo que dejaba media vista
+// general en gris al poco de abrirla.
+//
+// Fuera de esta lista a propósito: 'unit-totem-2' (registrada, nunca reportó),
+// 'unit-totem-6' (perdió señal hace 6 h) y 'unit-tank-1' (última señal hace
+// 2 min). Son los tres estados que la UI debe saber dibujar.
+const HEARTBEAT_UNITS = ['unit-totem-1', 'unit-totem-3', 'unit-totem-4', 'unit-totem-5']
+
+// Deriva el siguiente valor manteniendo null si la unidad no monta ese sensor.
+const drift = (v, amp) =>
+  v == null ? null : Math.round((v + (Math.random() - 0.5) * amp) * 10) / 10
+
+// Solo se activa en modo mock: el import de este módulo ocurre siempre
+// (import estático), pero el intervalo real no debe correr en modo normal.
 if (import.meta.env.VITE_USE_MOCKS === 'true') {
-  // "unit-totem-1" es la única unidad que recibe lecturas en vivo de forma
-  // continua — simula el ESP32 conectado. Las demás se quedan estáticas para
-  // poder probar los estados "esperando datos" y "sin señal" sin código extra.
   setInterval(() => {
-    const current = store.liveState['unit-totem-1']
-    if (!current) return
-    const r = current.readings
-    setLiveState('unit-totem-1', {
-      last_seen: new Date().toISOString(),
-      readings: {
-        ...r,
-        temperature: Math.round((r.temperature + (Math.random() - 0.5) * 1.0) * 10) / 10,
-        humidity: Math.round((r.humidity + (Math.random() - 0.5) * 2) * 10) / 10,
-        air_quality: r.air_quality != null ? Math.round((r.air_quality + (Math.random() - 0.5) * 20) * 10) / 10 : null,
-        methane: r.methane != null ? Math.round((r.methane + (Math.random() - 0.5) * 30) * 10) / 10 : null,
-        co2: r.co2 != null ? Math.round((r.co2 + (Math.random() - 0.5) * 80) * 10) / 10 : null,
-        timestamp: new Date().toISOString(),
-      },
-    })
+    const now = new Date().toISOString()
+    for (const unitId of HEARTBEAT_UNITS) {
+      const current = store.liveState[unitId]
+      if (!current) continue
+      const r = current.readings
+      setLiveState(unitId, {
+        last_seen: now,
+        readings: {
+          ...r,
+          temperature: drift(r.temperature, 1.0),
+          humidity:    drift(r.humidity, 2),
+          light:       drift(r.light, 30),
+          air_quality: drift(r.air_quality, 20),
+          methane:     drift(r.methane, 30),
+          co2:         drift(r.co2, 80),
+          timestamp: now,
+        },
+      })
+    }
   }, 4000)
 }

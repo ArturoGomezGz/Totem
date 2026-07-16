@@ -97,6 +97,11 @@
     "noTotemsHint": "Register a totem to see its readings together here.",
     "noSignal": "No signal from the device.",
     "pumpOn": "Watering",
+    "viewCards": "Cards",
+    "viewTable": "Grid",
+    "viewToggleLabel": "Live readings layout",
+    "unitColumn": "Unit",
+    "lastSeenColumn": "Last seen",
     "pickAUnit": "Select at least one totem to compare.",
     "comparing_one": "{{count}} totem on the chart",
     "comparing_other": "{{count}} totems on the chart",
@@ -115,7 +120,8 @@
     "offline": "No signal",
     "noProfile": "No profile",
     "alertCount_one": "{{count}} alert",
-    "alertCount_other": "{{count}} alerts"
+    "alertCount_other": "{{count}} alerts",
+    "inMaintenance": "In maintenance"
   },
   "profiles": {
     "title": "Crop profiles",
@@ -250,12 +256,6 @@
     "statusOn": "PUMP ON",
     "statusOff": "PUMP OFF",
     "liveReadings": "Live readings",
-    "sensorTemperature": "Temperature",
-    "sensorHumidity": "Humidity",
-    "sensorLight": "PAR light",
-    "sensorAirQuality": "Air quality",
-    "sensorMethane": "Methane",
-    "sensorCo2": "CO₂",
     "waitingDeviceData": "Waiting for device data..."
   },
   "readingsChart": {
@@ -407,5 +407,26 @@
     "pendingCountWarning_one": "{{count}} unit has this version as a pending update. Deleting it cancels that pending update (units that already installed it aren't affected).",
     "pendingCountWarning_other": "{{count}} units have this version as a pending update. Deleting it cancels that pending update (units that already installed it aren't affected).",
     "deleting": "Deleting..."
+  },
+  "maintenance": {
+    "title": "Maintenance",
+    "badge": "In maintenance",
+    "hint": "Records that the unit is being serviced: the server discards the readings, events and alerts it sends, and stops reporting it as down. It does not stop the unit — as long as it has power it keeps measuring and irrigating on its own.",
+    "disconnectTitle": "Disconnect the unit before servicing it",
+    "disconnectBody": "Maintenance turns nothing off: the firmware decides on its own and, as long as it has power, it will keep measuring and may start the pump at any moment.",
+    "noteLabel": "Reason (optional)",
+    "notePlaceholder": "e.g. pump replacement and nozzle cleaning",
+    "startButton": "Put in maintenance",
+    "starting": "Activating...",
+    "confirmStartButton": "Understood, activate",
+    "liveNotice": "While it lasts, nothing it sends is stored: readings, events and alerts are discarded.",
+    "activeSince": "In maintenance since {{date}}",
+    "startedBy": "Activated by {{email}}",
+    "endButton": "End maintenance",
+    "ending": "Ending...",
+    "endHint": "Reconnect the unit before ending, to confirm it starts up correctly and its readings are stored again.",
+    "history": "Previous service windows",
+    "ongoing": "Ongoing",
+    "by": "by {{email}}"
   }
 }

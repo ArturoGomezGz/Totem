@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 import state
 from auth import get_current_user
 from db import get_db
-from models import CropProfile, DeviceEvent, FirmwareRelease, Membership, Reading, TotemConfig, Unit, User
+from models import (
+    CropProfile, DeviceEvent, FirmwareRelease, MaintenanceWindow, Membership,
+    Reading, TotemConfig, Unit, User,
+)
 from mqtt import mqtt_client
 
 router = APIRouter(tags=["units"])
@@ -40,6 +43,24 @@ class UnitIn(BaseModel):
     name: str
 
 
+class MaintenanceWindowOut(BaseModel):
+    id: str
+    unit_id: str
+    started_at: datetime
+    started_by: str
+    started_by_email: Optional[str] = None
+    ended_at: Optional[datetime] = None
+    ended_by: Optional[str] = None
+    ended_by_email: Optional[str] = None
+    note: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class MaintenanceStartIn(BaseModel):
+    note: Optional[str] = None
+
+
 class UnitOut(BaseModel):
     id: str
     organization_id: str
@@ -51,6 +72,9 @@ class UnitOut(BaseModel):
     last_seen: Optional[datetime] = None
     created_at: datetime
     active_profile_id: Optional[str] = None
+    # Ventana de mantenimiento abierta, o None si la unidad opera normal. Es el
+    # estado "en mantenimiento" — derivado, no un flag almacenado.
+    maintenance: Optional[MaintenanceWindowOut] = None
 
     model_config = {"from_attributes": True}
 
@@ -97,7 +121,37 @@ def _active_profile_id(unit: Unit, db: Session) -> Optional[str]:
     return str(config.active_profile_id) if config and config.active_profile_id else None
 
 
+def _window_to_out(window: MaintenanceWindow, db: Session) -> MaintenanceWindowOut:
+    """Resuelve los emails de quien abrió y cerró la ventana — la UI muestra
+    personas, no UUIDs."""
+    emails = {
+        str(u.id): u.email
+        for u in db.query(User).filter(
+            User.id.in_([i for i in (window.started_by, window.ended_by) if i])
+        ).all()
+    }
+    return MaintenanceWindowOut(
+        id=str(window.id),
+        unit_id=str(window.unit_id),
+        started_at=window.started_at,
+        started_by=str(window.started_by),
+        started_by_email=emails.get(str(window.started_by)),
+        ended_at=window.ended_at,
+        ended_by=str(window.ended_by) if window.ended_by else None,
+        ended_by_email=emails.get(str(window.ended_by)) if window.ended_by else None,
+        note=window.note,
+    )
+
+
+def _open_window(unit_id: str, db: Session) -> Optional[MaintenanceWindow]:
+    return db.query(MaintenanceWindow).filter(
+        MaintenanceWindow.unit_id == unit_id,
+        MaintenanceWindow.ended_at.is_(None),
+    ).first()
+
+
 def _unit_to_out(unit: Unit, db: Session) -> UnitOut:
+    window = _open_window(str(unit.id), db)
     return UnitOut(
         id=str(unit.id),
         organization_id=str(unit.organization_id),
@@ -109,6 +163,7 @@ def _unit_to_out(unit: Unit, db: Session) -> UnitOut:
         last_seen=unit.last_seen,
         created_at=unit.created_at,
         active_profile_id=_active_profile_id(unit, db),
+        maintenance=_window_to_out(window, db) if window else None,
     )
 
 
@@ -695,3 +750,163 @@ def assign_profile(
     )
 
     return {"detail": "Perfil asignado"}
+
+
+# ---------- Mantenimiento ----------
+#
+# El mantenimiento vive enteramente en la Capa 2: no se le ordena nada al
+# firmware ni se toca la decisión de riego (la Capa 1 sigue siendo autónoma, ver
+# CLAUDE.md). Es la seguridad física —desconectar la unidad— la que garantiza que
+# no riegue ni mida; estos endpoints solo registran la ventana para que el
+# dashboard lo refleje y para que el server descarte lo que la unidad publique
+# si se quedó encendida (ver mqtt.py).
+
+
+@router.post(
+    "/units/{unit_id}/maintenance",
+    summary="Poner una unidad en mantenimiento",
+    description="""
+**¿Qué hace?**
+Abre una ventana de mantenimiento para la unidad, registrando quién la inició y cuándo.
+Mientras la ventana está abierta el server **descarta** todas las lecturas, eventos y
+alertas que publique la unidad en vez de persistirlos. Los reportes de versión de
+firmware (`status`) sí se siguen procesando, para no perder el rastro de un OTA
+aprovechado durante la intervención.
+
+**¿Para qué?**
+Permite intervenir físicamente una unidad sin contaminar el histórico con telemetría
+de sensores manipulados, sin disparar alertas de Telegram por falsos positivos y sin
+que aparezca como caída en el dashboard. La ventana queda registrada para explicar
+después el hueco en la serie de datos.
+
+**¿Dónde se usa?**
+Vista de detalle de unidad — pestaña Configuración, tarjeta "Mantenimiento".
+
+> **Nota:** poner una unidad en mantenimiento **no la detiene**. El firmware es
+> autónomo y seguirá midiendo y regando si tiene corriente. Antes de intervenir la
+> unidad hay que desconectarla físicamente.
+""",
+    response_model=MaintenanceWindowOut,
+    response_description="La ventana de mantenimiento recién abierta",
+    status_code=201,
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "La unidad no pertenece a una organización del usuario"},
+        404: {"description": "Unidad no encontrada"},
+        409: {"description": "La unidad ya está en mantenimiento"},
+    },
+    tags=["units"],
+)
+def start_maintenance(
+    unit_id: str,
+    body: MaintenanceStartIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_unit_access(unit_id, current_user, db)
+
+    # No se exige rol admin a propósito: quien interviene físicamente la unidad
+    # suele ser un técnico de campo sin permisos de administración, y la acción
+    # es reversible y no destructiva (a diferencia de dar de baja una unidad).
+    if _open_window(unit_id, db):
+        raise HTTPException(status_code=409, detail="La unidad ya está en mantenimiento")
+
+    window = MaintenanceWindow(
+        unit_id=uuid.UUID(unit_id),
+        started_at=datetime.now(timezone.utc),
+        started_by=current_user.id,
+        note=body.note,
+    )
+    db.add(window)
+    db.commit()
+    db.refresh(window)
+    return _window_to_out(window, db)
+
+
+@router.delete(
+    "/units/{unit_id}/maintenance",
+    summary="Sacar una unidad de mantenimiento",
+    description="""
+**¿Qué hace?**
+Cierra la ventana de mantenimiento abierta de la unidad, registrando quién la cerró y
+cuándo. A partir de ese momento el server vuelve a persistir las lecturas, eventos y
+alertas que publique la unidad.
+
+**¿Para qué?**
+Devuelve la unidad a operación normal una vez terminada la intervención física.
+
+**¿Dónde se usa?**
+Vista de detalle de unidad — pestaña Configuración, tarjeta "Mantenimiento".
+""",
+    response_model=MaintenanceWindowOut,
+    response_description="La ventana de mantenimiento ya cerrada",
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "La unidad no pertenece a una organización del usuario"},
+        404: {"description": "Unidad no encontrada, o la unidad no está en mantenimiento"},
+    },
+    tags=["units"],
+)
+def end_maintenance(
+    unit_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_unit_access(unit_id, current_user, db)
+
+    window = _open_window(unit_id, db)
+    if not window:
+        raise HTTPException(status_code=404, detail="La unidad no está en mantenimiento")
+
+    window.ended_at = datetime.now(timezone.utc)
+    window.ended_by = current_user.id
+    db.commit()
+    db.refresh(window)
+    return _window_to_out(window, db)
+
+
+@router.get(
+    "/units/{unit_id}/maintenance",
+    summary="Historial de mantenimientos de una unidad",
+    description="""
+**¿Qué hace?**
+Devuelve las ventanas de mantenimiento de la unidad, de más reciente a más antigua.
+La primera puede estar abierta (`ended_at` en `null`), lo que significa que la unidad
+está en mantenimiento ahora mismo.
+
+**¿Para qué?**
+Permite auditar quién intervino la unidad y cuándo, y explicar los huecos en el
+histórico de lecturas: un periodo sin datos que coincide con una ventana es
+mantenimiento, no una caída del dispositivo.
+
+**¿Dónde se usa?**
+Vista de detalle de unidad — pestaña Configuración, tarjeta "Mantenimiento".
+
+**Parámetros de filtrado:**
+
+| Parámetro | Tipo | Default | Descripción |
+|---|---|---|---|
+| `limit` | int | 20 | Máximo de ventanas devueltas (1-100) |
+""",
+    response_model=list[MaintenanceWindowOut],
+    response_description="Ventanas de mantenimiento, más reciente primero",
+    responses={
+        401: {"description": "Token ausente, inválido o expirado"},
+        403: {"description": "La unidad no pertenece a una organización del usuario"},
+        404: {"description": "Unidad no encontrada"},
+    },
+    tags=["units"],
+)
+def list_maintenance(
+    unit_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _require_unit_access(unit_id, current_user, db)
+
+    windows = db.query(MaintenanceWindow).filter(
+        MaintenanceWindow.unit_id == unit_id,
+    ).order_by(MaintenanceWindow.started_at.desc()).limit(limit).all()
+
+    return [_window_to_out(w, db) for w in windows]

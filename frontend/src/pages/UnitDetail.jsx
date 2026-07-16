@@ -10,17 +10,9 @@ import ReadingsChart from '../components/ReadingsChart'
 import EventsList from '../components/EventsList'
 import AlertsList from '../components/AlertsList'
 import UnitSettingsPanel from '../components/UnitSettingsPanel'
+import { SENSORS } from '../utils/sensors'
 
 const CMD_LOCK_MS = 8000
-
-const SENSOR_ACCENTS = {
-  temperature: 'var(--teal-500)',
-  humidity:    'var(--blue-700)',
-  light:       'var(--lime-500)',
-  air_quality: 'var(--status-warning)',
-  methane:     'var(--status-danger)',
-  co2:         '#7C5CBF',
-}
 
 export default function UnitDetail() {
   const { t }            = useTranslation()
@@ -85,6 +77,9 @@ export default function UnitDetail() {
 
   const pumpState = unit?.pump_state ?? 'off'
   const r         = unit?.readings
+  // Sensores que esta unidad reporta de verdad. No todas traen el set completo,
+  // y un sensor ausente llega como null indistinguible de uno que no existe.
+  const reported  = r ? SENSORS.filter(s => r[s.key] != null) : []
   // 'supplying' viene confirmado por el dispositivo (válvula abierta esperando
   // el flotador) — una vez que llega, ya no depende del timer local pumpPending.
   const pumpPhase = pumpState === 'supplying' ? 'supplying'
@@ -95,11 +90,17 @@ export default function UnitDetail() {
     ? new Date(unit.last_seen).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
     : null
 
+  const inMaintenance = !!unitMeta?.maintenance
   const isOnline = wsConnected && !!unit && !isOffline
+  // En mantenimiento el silencio de la unidad es esperado (la desconectó el
+  // técnico), así que el estado de conexión no debe leerse como una caída.
   const connectionBadge = (
     <StatusDot
-      tone={isOnline ? 'success' : 'neutral'}
-      title={isOnline ? t('unitDetail.online') : !wsConnected ? t('unitDetail.reconnecting') : !unit ? t('unitDetail.waiting') : t('unitDetail.offline')}
+      tone={inMaintenance ? 'warning' : isOnline ? 'success' : 'neutral'}
+      title={inMaintenance ? t('maintenance.badge')
+        : isOnline ? t('unitDetail.online')
+        : !wsConnected ? t('unitDetail.reconnecting')
+        : !unit ? t('unitDetail.waiting') : t('unitDetail.offline')}
     />
   )
 
@@ -113,6 +114,7 @@ export default function UnitDetail() {
           {unitMeta?.name ?? t('unitDetail.loading')}
         </h2>
         {connectionBadge}
+        {inMaintenance && <Badge tone="warning">{t('maintenance.badge')}</Badge>}
         {unitMeta?.type === 'totem' && (
           <Badge tone={activeProfile ? 'blue' : 'neutral'}>
             {activeProfile ? activeProfile.name : t('unitDetail.noProfile')}
@@ -138,16 +140,28 @@ export default function UnitDetail() {
 
       {tab === 'live' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+          {/* La advertencia de desconexión se repite aquí a propósito, aunque
+              ya esté en la pestaña de configuración: esta es la vista que el
+              técnico consulta frente a la unidad, y quien la abre puede no ser
+              quien activó el mantenimiento. Es el único aviso que lo separa de
+              una bomba que puede arrancar sola. */}
+          {inMaintenance && (
+            <Alert tone="warning" title={t('maintenance.disconnectTitle')}>
+              {t('maintenance.disconnectBody')} {t('maintenance.liveNotice')}
+            </Alert>
+          )}
+
           <PumpCard
             on={pumpState === 'on'} phase={pumpPhase}
             offline={isOffline && !!unit}
+            maintenance={inMaintenance}
             lastSeen={lastSeenStr}
             onToggle={togglePump}
           />
 
           {cmdError && <Alert tone="danger" onClose={() => setCmdError(null)}>{cmdError}</Alert>}
 
-          {r ? (
+          {reported.length > 0 ? (
             <div>
               <span style={{
                 fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
@@ -162,13 +176,19 @@ export default function UnitDetail() {
                   </span>
                 )}
               </span>
+              {/* Solo los sensores que esta unidad reporta: una tarjeta en '—'
+                  ocupa el mismo espacio que un dato real sin decir nada. Que un
+                  sensor no aparezca ya comunica que la unidad no lo trae. */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(176px, 1fr))', gap: 'var(--space-3)' }}>
-                <StatCard value={r.temperature != null ? r.temperature : '—'} unit={r.temperature != null ? '°C'  : null} label={t('unitDetail.sensorTemperature')} accent={SENSOR_ACCENTS.temperature} />
-                <StatCard value={r.humidity    != null ? r.humidity    : '—'} unit={r.humidity    != null ? '%'   : null} label={t('unitDetail.sensorHumidity')}    accent={SENSOR_ACCENTS.humidity}    />
-                <StatCard value={r.light       != null ? r.light       : '—'}                                             label={t('unitDetail.sensorLight')}       accent={SENSOR_ACCENTS.light}       />
-                <StatCard value={r.air_quality != null ? r.air_quality : '—'}                                             label={t('unitDetail.sensorAirQuality')}  accent={SENSOR_ACCENTS.air_quality} />
-                <StatCard value={r.methane     != null ? r.methane     : '—'}                                             label={t('unitDetail.sensorMethane')}     accent={SENSOR_ACCENTS.methane}     />
-                <StatCard value={r.co2         != null ? r.co2         : '—'} unit={r.co2         != null ? 'ppm' : null} label={t('unitDetail.sensorCo2')}          accent={SENSOR_ACCENTS.co2}         />
+                {reported.map(s => (
+                  <StatCard
+                    key={s.key}
+                    value={r[s.key]}
+                    unit={s.unit}
+                    label={t(s.labelKey)}
+                    accent={s.hex}
+                  />
+                ))}
               </div>
             </div>
           ) : (
@@ -189,7 +209,7 @@ export default function UnitDetail() {
   )
 }
 
-function PumpCard({ on, phase, offline, lastSeen, onToggle }) {
+function PumpCard({ on, phase, offline, maintenance = false, lastSeen, onToggle }) {
   const { t } = useTranslation()
   const supplying   = phase === 'supplying'
   const isBlocked   = phase === 'sending' || phase === 'pending' || supplying
@@ -238,7 +258,11 @@ function PumpCard({ on, phase, offline, lastSeen, onToggle }) {
           </Button>
         </>
       ) : (
-        <Button fullWidth size="lg" variant={on ? 'outline' : 'teal'} disabled={isBlocked} onClick={onToggle}
+        // En mantenimiento el riego manual sigue disponible a propósito —el
+        // técnico puede necesitar purgar la bomba— pero deja de ser la acción
+        // sugerida: un botón teal a toda anchura invitando a regar, justo debajo
+        // del aviso de que la bomba puede arrancar sola, contradice el aviso.
+        <Button fullWidth size="lg" variant={on || maintenance ? 'outline' : 'teal'} disabled={isBlocked} onClick={onToggle}
           style={on ? { borderColor: 'var(--status-danger)', color: 'var(--status-danger)' } : {}}>
           {btnLabel}
         </Button>

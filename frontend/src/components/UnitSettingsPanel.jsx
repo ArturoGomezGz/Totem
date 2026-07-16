@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Button, Card, Alert, Input, Badge, Select } from '../design-system'
 import ProvisioningPanel from './ProvisioningPanel'
+import MaintenancePanel from './MaintenancePanel'
 
 const eyebrow = {
   fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
@@ -113,6 +114,12 @@ export default function UnitSettingsPanel({ unit, profiles = [], onUnitChange })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)', maxWidth: 560 }}>
+
+      {/* Primero por frecuencia de uso, no por jerarquía conceptual: intervenir
+          una unidad es rutina, y terminar un mantenimiento tiene urgencia real
+          (la unidad puede estar regando mientras alguien la tiene abierta).
+          Lo que va debajo —API key, dar de baja— casi nunca se toca. */}
+      <MaintenancePanel unit={unit} onUnitChange={onUnitChange} />
 
       <Card>
         <span style={eyebrow}>{t('unitSettings.deviceInfo')}</span>

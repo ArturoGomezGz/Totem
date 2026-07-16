@@ -97,6 +97,11 @@
     "noTotemsHint": "Registra un totem para ver aquí sus lecturas en conjunto.",
     "noSignal": "Sin señal del dispositivo.",
     "pumpOn": "Regando",
+    "viewCards": "Tarjetas",
+    "viewTable": "Cuadrícula",
+    "viewToggleLabel": "Forma de ver las lecturas en vivo",
+    "unitColumn": "Unidad",
+    "lastSeenColumn": "Últ. señal",
     "pickAUnit": "Selecciona al menos un totem para comparar.",
     "comparing_one": "{{count}} totem en la gráfica",
     "comparing_other": "{{count}} totems en la gráfica",
@@ -115,7 +120,8 @@
     "offline": "Sin señal",
     "noProfile": "Sin perfil",
     "alertCount_one": "{{count}} alerta",
-    "alertCount_other": "{{count}} alertas"
+    "alertCount_other": "{{count}} alertas",
+    "inMaintenance": "En mantenimiento"
   },
   "profiles": {
     "title": "Perfiles de cultivo",
@@ -250,12 +256,6 @@
     "statusOn": "BOMBA ENCENDIDA",
     "statusOff": "BOMBA APAGADA",
     "liveReadings": "Lecturas en vivo",
-    "sensorTemperature": "Temperatura",
-    "sensorHumidity": "Humedad",
-    "sensorLight": "Luz PAR",
-    "sensorAirQuality": "Calidad aire",
-    "sensorMethane": "Metano",
-    "sensorCo2": "CO₂",
     "waitingDeviceData": "Esperando datos del dispositivo..."
   },
   "readingsChart": {
@@ -407,5 +407,26 @@
     "pendingCountWarning_one": "{{count}} unidad tiene esta versión como actualización pendiente. Al eliminarla, esa actualización pendiente se cancela (las unidades no se ven afectadas si ya la instalaron).",
     "pendingCountWarning_other": "{{count}} unidades tienen esta versión como actualización pendiente. Al eliminarla, esa actualización pendiente se cancela (las unidades no se ven afectadas si ya la instalaron).",
     "deleting": "Eliminando..."
+  },
+  "maintenance": {
+    "title": "Mantenimiento",
+    "badge": "En mantenimiento",
+    "hint": "Registra que la unidad está intervenida: el server descarta las lecturas, eventos y alertas que envíe, y deja de reportarla como caída. No detiene la unidad — mientras tenga corriente sigue midiendo y regando sola.",
+    "disconnectTitle": "Desconecta la unidad antes de intervenirla",
+    "disconnectBody": "El mantenimiento no apaga nada: el firmware decide por su cuenta y, mientras tenga corriente, seguirá midiendo y puede encender la bomba en cualquier momento.",
+    "noteLabel": "Motivo (opcional)",
+    "notePlaceholder": "Ej. cambio de bomba y limpieza de boquillas",
+    "startButton": "Poner en mantenimiento",
+    "starting": "Activando...",
+    "confirmStartButton": "Entendido, activar",
+    "liveNotice": "Mientras dure, nada de lo que envíe se guarda: las lecturas, los eventos y las alertas se descartan.",
+    "activeSince": "En mantenimiento desde el {{date}}",
+    "startedBy": "Activado por {{email}}",
+    "endButton": "Terminar mantenimiento",
+    "ending": "Terminando...",
+    "endHint": "Vuelve a conectar la unidad antes de terminar, para confirmar que arranca bien y que sus lecturas se vuelven a guardar.",
+    "history": "Intervenciones anteriores",
+    "ongoing": "En curso",
+    "by": "por {{email}}"
   }
 }

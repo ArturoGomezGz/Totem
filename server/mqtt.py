@@ -6,7 +6,7 @@ import paho.mqtt.client as mqtt
 
 from config import MQTT_HOST, MQTT_PORT, MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD
 from db import SessionLocal
-from models import Alert, DeviceEvent, Reading, Unit
+from models import Alert, DeviceEvent, MaintenanceWindow, Reading, Unit
 
 SUBSCRIPTIONS = [
     "totem/+/readings",
@@ -20,6 +20,31 @@ SUBSCRIPTIONS = [
 # descarta antes de tocar la DB para no violar el constraint.
 _VALID_EVENT_TYPES = {"pump_on", "pump_off", "valve_open", "valve_close"}
 _VALID_EVENT_TRIGGERS = {"autonomous", "override"}
+
+
+def _in_maintenance(unit_id_str: str) -> bool:
+    """True si la unidad tiene una ventana de mantenimiento abierta.
+
+    El mantenimiento es un estado de la Capa 2: la unidad no sabe que está en
+    mantenimiento y sigue publicando con normalidad si está encendida. Es el
+    server quien decide que nada de lo que diga cuenta mientras esté intervenida.
+
+    Ante un error de DB devuelve False — descartar por equivocación pierde datos
+    irrecuperables, mientras que persistir de más solo ensucia el histórico de
+    una ventana que ya está registrada y es explicable después.
+    """
+    db = SessionLocal()
+    try:
+        open_window = db.query(MaintenanceWindow.id).filter(
+            MaintenanceWindow.unit_id == unit_id_str,
+            MaintenanceWindow.ended_at.is_(None),
+        ).first()
+        return open_window is not None
+    except Exception as e:
+        print(f"[mqtt] error consultando mantenimiento de {unit_id_str}: {e}")
+        return False
+    finally:
+        db.close()
 
 
 class MQTTClient:
@@ -70,6 +95,20 @@ class MQTTClient:
         if len(parts) != 3:
             return
         unit_id, kind = parts[1], parts[2]
+
+        # Unidad en mantenimiento: se descarta todo lo que reporte. La telemetría
+        # de una unidad intervenida no es dato real (sensores manipulados, bomba
+        # accionada a mano) y contaminaría el histórico, las alertas y el futuro
+        # entrenamiento del modelo de Pn.
+        #
+        # `status` se exceptúa a propósito: no es telemetría sino metadata del
+        # dispositivo (versión de firmware). El mantenimiento es justo cuando se
+        # aprovecha para actualizar por OTA, y perder ese reporte dejaría al
+        # server con una versión equivocada en la DB.
+        if kind in ("readings", "events", "alerts") and _in_maintenance(unit_id):
+            print(f"[mqtt] {kind} descartado — unidad {unit_id} en mantenimiento")
+            return
+
         if kind == "readings":
             state.update_readings(unit_id, payload)
             self._persist_reading(unit_id, payload)

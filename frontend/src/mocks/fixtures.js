@@ -5,6 +5,10 @@ const hoursAgo   = (h) => new Date(Date.now() - h * 3600_000).toISOString()
 const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString()
 const round1     = (n) => Math.round(n * 10) / 10
 
+export const ALL_SENSORS = ['temperature', 'humidity', 'light', 'air_quality', 'methane', 'co2']
+
+// Genera histórico sintético de una unidad.
+//
 // `gasSinceH`: los sensores de gas (calidad de aire, metano) se agregaron
 // después, así que solo tienen histórico en las últimas `gasSinceH` horas —
 // antes llegan como null. Reproduce el caso real donde un sensor tiene menos
@@ -12,10 +16,16 @@ const round1     = (n) => Math.round(n * 10) / 10
 // `bias`: desplaza el punto de partida de temperatura/humedad para que cada
 // unidad simulada tenga su propia curva. Sin esto todos los totems generan
 // series casi idénticas y la gráfica comparativa no muestra nada útil.
-export function genReadings(hours = 24 * 30, stepMin = 20, gasSinceH = 8, bias = 0) {
+// `sensors`: qué sensores monta esta unidad. En campo no todos los totems
+// llevan el mismo set — los que no monta llegan siempre como null, y la UI
+// debe distinguir "no lo tiene" de "todavía no ha reportado".
+export function genReadings({
+  hours = 24 * 30, stepMin = 20, gasSinceH = 8, bias = 0, sensors = ALL_SENSORS,
+} = {}) {
   const steps = Math.floor((hours * 60) / stepMin)
   const now = Date.now()
   const points = []
+  const has = (k) => sensors.includes(k)
   let temp = 21 + bias, hum = 62 - bias * 2
 
   for (let i = steps; i >= 0; i--) {
@@ -28,12 +38,12 @@ export function genReadings(hours = 24 * 30, stepMin = 20, gasSinceH = 8, bias =
 
     points.push({
       timestamp: ts.toISOString(),
-      temperature: round1(temp),
-      humidity: round1(hum),
-      light: round1(light),
-      air_quality: hasGas ? round1(150 + Math.random() * 60) : null,
-      methane: hasGas ? round1(300 + Math.random() * 90) : null,
-      co2: hasGas ? round1(600 + Math.random() * 400) : null,
+      temperature: has('temperature') ? round1(temp)  : null,
+      humidity:    has('humidity')    ? round1(hum)   : null,
+      light:       has('light')       ? round1(light) : null,
+      air_quality: has('air_quality') && hasGas ? round1(150 + Math.random() * 60)  : null,
+      methane:     has('methane')     && hasGas ? round1(300 + Math.random() * 90)  : null,
+      co2:         has('co2')         && hasGas ? round1(600 + Math.random() * 400) : null,
     })
   }
   return points.reverse() // más reciente primero, igual que el API real
@@ -87,11 +97,20 @@ export function seedUnits() {
       created_at: hoursAgo(24 * 9), active_profile_id: 'profile-albahaca',
       target_firmware_release_id: null,
     },
+    // 'Totem Poniente' está sin señal Y en mantenimiento — la combinación real
+    // (el técnico la desconectó para intervenirla). Sirve para desarrollar la
+    // precedencia: la unidad debe leerse como "en mantenimiento", no como caída.
     {
       id: 'unit-totem-6', organization_id: 'org-demo', type: 'totem', name: 'Totem Poniente',
       is_active: true, firmware_version: '0.9.2', last_seen: hoursAgo(6),
       created_at: hoursAgo(24 * 6), active_profile_id: 'profile-lechuga',
       target_firmware_release_id: null,
+      maintenance: {
+        id: 'mw-open-1', unit_id: 'unit-totem-6', started_at: hoursAgo(6),
+        started_by: 'user-demo-2', started_by_email: 'operador@demo.com',
+        ended_at: null, ended_by: null, ended_by_email: null,
+        note: 'Cambio de bomba y limpieza de boquillas',
+      },
     },
     {
       id: 'unit-tank-1', organization_id: 'org-demo', type: 'supply_tank', name: 'Tanque Principal',
@@ -100,6 +119,23 @@ export function seedUnits() {
       target_firmware_release_id: null,
     },
   ]
+}
+
+// Historial de ventanas por unidad, más reciente primero. La ventana abierta de
+// 'Totem Poniente' es el MISMO objeto que su `unit.maintenance` en seedUnits —
+// se resuelve en store.js al construir el store, para que cerrarla desde la UI
+// actualice ambas vistas.
+export function seedMaintenance() {
+  return {
+    'unit-totem-1': [
+      {
+        id: 'mw-closed-1', unit_id: 'unit-totem-1',
+        started_at: hoursAgo(24 * 3), started_by: 'user-demo', started_by_email: 'admin@demo.com',
+        ended_at: hoursAgo(24 * 3 - 2), ended_by: 'user-demo', ended_by_email: 'admin@demo.com',
+        note: 'Recalibración del sensor de humedad',
+      },
+    ],
+  }
 }
 
 export function seedIrrigationMethods() {
@@ -208,46 +244,72 @@ export function seedEvents() {
   ]
 }
 
+// Cada totem monta un set distinto de sensores, como en campo: solo los más
+// nuevos llevan CO₂ y gases, y alguna unidad vieja no trae luxómetro. Sirve
+// para ejercitar que la UI muestre lo que hay en vez de una fila de '—'.
+export const UNIT_SENSORS = {
+  'unit-totem-1': ALL_SENSORS,
+  'unit-totem-3': ALL_SENSORS,
+  // Sin CO2 ni gases: solo el set climático básico.
+  'unit-totem-4': ['temperature', 'humidity', 'light'],
+  // Sin luxómetro, pero con la placa de gases completa.
+  'unit-totem-5': ['temperature', 'humidity', 'air_quality', 'methane', 'co2'],
+  // Unidad mínima: solo temperatura y humedad.
+  'unit-totem-6': ['temperature', 'humidity'],
+  'unit-tank-1': ['temperature', 'humidity'],
+}
+
 export function seedReadings() {
   return {
-    'unit-totem-1': genReadings(),
+    'unit-totem-1': genReadings({ sensors: UNIT_SENSORS['unit-totem-1'] }),
     'unit-totem-2': [],
-    'unit-totem-3': genReadings(24 * 30, 20, 8, 2.5),
-    'unit-totem-4': genReadings(24 * 30, 20, 8, -3),
-    'unit-totem-5': genReadings(24 * 30, 20, 8, 5),
+    'unit-totem-3': genReadings({ bias: 2.5, sensors: UNIT_SENSORS['unit-totem-3'] }),
+    'unit-totem-4': genReadings({ bias: -3,  sensors: UNIT_SENSORS['unit-totem-4'] }),
+    'unit-totem-5': genReadings({ bias: 5,   sensors: UNIT_SENSORS['unit-totem-5'] }),
     // Sin señal desde hace 6 h: tiene histórico, pero se corta ahí.
-    'unit-totem-6': genReadings(24 * 30, 20, 8, -1.5).filter(
+    'unit-totem-6': genReadings({ bias: -1.5, sensors: UNIT_SENSORS['unit-totem-6'] }).filter(
       r => Date.now() - new Date(r.timestamp).getTime() > 6 * 3600_000
     ),
-    'unit-tank-1': genReadings(24, 60),
+    'unit-tank-1': genReadings({ hours: 24, stepMin: 60, sensors: UNIT_SENSORS['unit-tank-1'] }),
   }
 }
 
+// Anula los sensores que la unidad no monta, para que el estado en vivo diga lo
+// mismo que su histórico. Escribir los nulos a mano en cada entrada se
+// desincroniza de UNIT_SENSORS a la primera que se edite una de las dos.
+function mounted(unitId, readings) {
+  const has = UNIT_SENSORS[unitId] ?? ALL_SENSORS
+  const out = { timestamp: readings.timestamp }
+  for (const k of ALL_SENSORS) out[k] = has.includes(k) ? (readings[k] ?? null) : null
+  return out
+}
+
 export function seedLiveState() {
+  const now = new Date().toISOString()
   return {
     'unit-totem-1': {
       pump_state: 'off',
-      readings: { temperature: 22.1, humidity: 61.4, light: 310, air_quality: 165, methane: 320, co2: 780, timestamp: new Date().toISOString() },
-      last_seen: new Date().toISOString(),
+      readings: mounted('unit-totem-1', { temperature: 22.1, humidity: 61.4, light: 310, air_quality: 165, methane: 320, co2: 780, timestamp: now }),
+      last_seen: now,
     },
     'unit-totem-3': {
       pump_state: 'on',
-      readings: { temperature: 24.6, humidity: 57.2, light: 295, air_quality: 172, methane: 331, co2: 910, timestamp: new Date().toISOString() },
-      last_seen: new Date().toISOString(),
+      readings: mounted('unit-totem-3', { temperature: 24.6, humidity: 57.2, light: 295, air_quality: 172, methane: 331, co2: 910, timestamp: now }),
+      last_seen: now,
     },
     'unit-totem-4': {
       pump_state: 'off',
-      readings: { temperature: 19.3, humidity: 68.9, light: 260, air_quality: 158, methane: 305, co2: 640, timestamp: new Date().toISOString() },
-      last_seen: new Date().toISOString(),
+      readings: mounted('unit-totem-4', { temperature: 19.3, humidity: 68.9, light: 260, timestamp: now }),
+      last_seen: now,
     },
     'unit-totem-5': {
       pump_state: 'off',
-      readings: { temperature: 26.8, humidity: 52.5, light: 340, air_quality: 181, methane: 344, co2: 1120, timestamp: new Date().toISOString() },
-      last_seen: new Date().toISOString(),
+      readings: mounted('unit-totem-5', { temperature: 26.8, humidity: 52.5, air_quality: 181, methane: 344, co2: 1120, timestamp: now }),
+      last_seen: now,
     },
     'unit-tank-1': {
       pump_state: 'off',
-      readings: { temperature: 24.0, humidity: 58.0, light: null, air_quality: null, methane: null, co2: null, timestamp: minutesAgo(2) },
+      readings: mounted('unit-tank-1', { temperature: 24.0, humidity: 58.0, timestamp: minutesAgo(2) }),
       last_seen: minutesAgo(2),
     },
     // unit-totem-6 sin entrada viva: perdió señal hace 6 h (ver seedUnits).

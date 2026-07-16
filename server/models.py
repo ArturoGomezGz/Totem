@@ -153,6 +153,26 @@ class Alert(Base):
     telegram_sent_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMPTZ)
 
 
+class MaintenanceWindow(Base):
+    """Periodo en que una unidad está intervenida por un técnico. Mientras hay
+    una ventana abierta (`ended_at IS NULL`) el server descarta todo lo que
+    publique la unidad — ver mqtt.py.
+
+    El estado "en mantenimiento" es derivado de la existencia de una ventana
+    abierta; no se duplica como flag en `units`. Un índice único parcial sobre
+    `unit_id WHERE ended_at IS NULL` impide dos ventanas abiertas a la vez."""
+
+    __tablename__ = "maintenance_windows"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    unit_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("units.id"), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
+    started_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMPTZ)
+    ended_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    note: Mapped[Optional[str]] = mapped_column(Text)
+
+
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 

@@ -4,9 +4,12 @@ import { Card, StatusDot, Badge } from '../design-system'
 import { useUnitWebSocket } from '../hooks/useUnitWebSocket'
 import { SENSORS } from '../utils/sensors'
 
-// Sensores que caben en una mini-card sin volverla ilegible. El resto vive en el
-// detalle de la unidad — esta vista es panorama, no sustituto del detalle.
-const SUMMARY_SENSORS = ['temperature', 'humidity', 'co2']
+// Cuántos sensores caben en una mini-card sin volverla ilegible. Se muestran los
+// primeros que la unidad reporte, en el orden de SENSORS: no todos los totems
+// traen el mismo set, y fijar la terna dejaba cards llenas de '—' en las
+// unidades que no montan CO₂. El set completo vive en el detalle y en la
+// cuadrícula — esta vista es panorama, no sustituto del detalle.
+const MAX_SUMMARY = 3
 
 export default function OverviewLiveGrid({ units }) {
   return (
@@ -30,6 +33,7 @@ function LiveUnitCard({ unit }) {
   const isOnline = wsConnected && !!live && !isOffline
   const r        = live?.readings
   const lastSeen = live?.last_seen ?? unit.last_seen
+  const shown    = r ? SENSORS.filter(s => r[s.key] != null).slice(0, MAX_SUMMARY) : []
 
   return (
     <Card
@@ -54,35 +58,28 @@ function LiveUnitCard({ unit }) {
         )}
       </div>
 
-      {r ? (
+      {shown.length > 0 ? (
         <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-          {SUMMARY_SENSORS.map(key => {
-            const meta = SENSORS.find(s => s.key === key)
-            const val  = r[key]
-            return (
-              <div key={key} style={{ minWidth: 64 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
-                  <span style={{
-                    fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-semibold)',
-                    fontSize: 'var(--text-lg)', lineHeight: 1,
-                    color: val != null ? meta.hex : 'var(--ink-300)',
-                  }}>
-                    {val ?? '—'}
-                  </span>
-                  {val != null && (
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{meta.unit}</span>
-                  )}
-                </div>
+          {shown.map(meta => (
+            <div key={meta.key} style={{ minWidth: 64 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, whiteSpace: 'nowrap' }}>
                 <span style={{
-                  fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
-                  fontSize: '10px', color: 'var(--text-muted)',
-                  letterSpacing: 'var(--tracking-caps)', textTransform: 'uppercase',
+                  fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-semibold)',
+                  fontSize: 'var(--text-lg)', lineHeight: 1, color: meta.hex,
                 }}>
-                  {t(meta.labelKey)}
+                  {r[meta.key]}
                 </span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{meta.unit}</span>
               </div>
-            )
-          })}
+              <span style={{
+                fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
+                fontSize: '10px', color: 'var(--text-muted)',
+                letterSpacing: 'var(--tracking-caps)', textTransform: 'uppercase',
+              }}>
+                {t(meta.labelKey)}
+              </span>
+            </div>
+          ))}
         </div>
       ) : (
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', margin: 0 }}>

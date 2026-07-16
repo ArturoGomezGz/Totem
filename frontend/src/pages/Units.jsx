@@ -114,13 +114,21 @@ export default function Units() {
                 fontFamily: 'var(--font-display)', fontWeight: 'var(--weight-semibold)',
                 fontSize: 'var(--text-base)', color: 'var(--text-strong)', marginBottom: 'var(--space-2)',
               }}>
+                {/* Una unidad en mantenimiento casi siempre está desconectada
+                    —es el técnico quien la desconectó— así que su silencio es
+                    esperado, no una caída. El punto de estado se muestra como
+                    advertencia en vez de "sin señal" para no pedir que alguien
+                    vaya a revisar una unidad que ya está siendo atendida. */}
                 <StatusDot
-                  tone={isUnitOnline(unit) ? 'success' : 'neutral'}
-                  title={isUnitOnline(unit) ? t('units.online') : t('units.offline')}
+                  tone={unit.maintenance ? 'warning' : isUnitOnline(unit) ? 'success' : 'neutral'}
+                  title={unit.maintenance ? t('units.inMaintenance') : isUnitOnline(unit) ? t('units.online') : t('units.offline')}
                 />
                 {unit.name}
               </p>
               <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+                {unit.maintenance && (
+                  <Badge tone="warning">{t('units.inMaintenance')}</Badge>
+                )}
                 <Badge tone="neutral">{t(`unitType.${unit.type}`, { defaultValue: unit.type })}</Badge>
                 {unit.type === 'totem' && (
                   <Badge tone={unit.active_profile_id ? 'blue' : 'warning'}>

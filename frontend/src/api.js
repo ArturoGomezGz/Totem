@@ -101,6 +101,10 @@ const realApi = {
 
   sendCommand:      (unit_id, type)      => request('POST', `/units/${unit_id}/commands`, { type }),
 
+  startMaintenance:   (unit_id, note)      => request('POST',   `/units/${unit_id}/maintenance`, { note: note || null }),
+  endMaintenance:     (unit_id)            => request('DELETE', `/units/${unit_id}/maintenance`),
+  getMaintenance:     (unit_id, limit = 20) => request('GET',   `/units/${unit_id}/maintenance?limit=${limit}`),
+
   getReadings: (unit_id, params = {}) => {
     const q = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null)))
     return request('GET', `/units/${unit_id}/readings?${q}`)

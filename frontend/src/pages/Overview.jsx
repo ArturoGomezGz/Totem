@@ -7,6 +7,7 @@ import { api } from '../api'
 import { OFFLINE_MS } from '../hooks/useUnitWebSocket'
 import { MAX_SERIES, assignColor, releaseColor } from '../utils/seriesPalette'
 import OverviewLiveGrid from '../components/OverviewLiveGrid'
+import OverviewLiveTable from '../components/OverviewLiveTable'
 import OverviewChart from '../components/OverviewChart'
 
 const isRecentlySeen = (unit) =>
@@ -19,6 +20,9 @@ export default function Overview() {
   const [units, setUnits] = useState([])
   const [error, setError] = useState(null)
   const [tab, setTab]     = useState('live')
+  // 'cards' resume lo que cada totem sí reporta; 'table' muestra la matriz
+  // completa de sensores. Son dos preguntas distintas sobre los mismos datos.
+  const [liveView, setLiveView] = useState('cards')
 
   const [selectedIds, setSelectedIds] = useState([])
   const [colors, setColors]           = useState({})
@@ -107,7 +111,16 @@ export default function Overview() {
             value={tab} onChange={setTab} style={{ marginBottom: 'var(--space-6)' }}
           />
 
-          {tab === 'live' && <OverviewLiveGrid units={ordered} />}
+          {tab === 'live' && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-4)' }}>
+                <ViewToggle value={liveView} onChange={setLiveView} />
+              </div>
+              {liveView === 'cards'
+                ? <OverviewLiveGrid  units={ordered} />
+                : <OverviewLiveTable units={ordered} />}
+            </>
+          )}
 
           {tab === 'readings' && (
             <OverviewChart
@@ -120,6 +133,50 @@ export default function Overview() {
         </>
       )}
     </AppShell>
+  )
+}
+
+// Segmented control, el mismo patrón que el selector de rango de las gráficas.
+function ViewToggle({ value, onChange }) {
+  const { t } = useTranslation()
+  const options = [
+    { id: 'cards', label: t('overview.viewCards') },
+    { id: 'table', label: t('overview.viewTable') },
+  ]
+
+  return (
+    <div
+      role="group"
+      aria-label={t('overview.viewToggleLabel')}
+      style={{
+        display: 'inline-flex', gap: 2, padding: 2,
+        background: 'var(--surface-fill)', borderRadius: 'var(--radius-pill)',
+        border: '1px solid var(--border-subtle)',
+      }}
+    >
+      {options.map(o => {
+        const active = value === o.id
+        return (
+          <button
+            key={o.id}
+            onClick={() => onChange(o.id)}
+            aria-pressed={active}
+            style={{
+              padding: '4px 14px', borderRadius: 'var(--radius-pill)', border: 'none',
+              background: active ? 'var(--surface-card)' : 'transparent',
+              color: active ? 'var(--text-body)' : 'var(--text-muted)',
+              fontFamily: 'var(--font-display)',
+              fontWeight: active ? 'var(--weight-semibold)' : 'var(--weight-regular)',
+              fontSize: 'var(--text-sm)', cursor: 'pointer', whiteSpace: 'nowrap',
+              boxShadow: active ? 'var(--shadow-sm)' : 'none',
+              transition: 'all var(--duration-base) var(--ease-standard)',
+            }}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

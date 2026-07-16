@@ -13,6 +13,11 @@ function notFound(detail) {
   return Promise.reject(err)
 }
 
+function conflict(detail) {
+  const err = new Error(detail)
+  return Promise.reject(err)
+}
+
 // Validador mínimo — replica el subconjunto de JSON Schema que usan los
 // params_schema del catálogo (required, properties.type=number,
 // additionalProperties=false). No es un validador general de JSON Schema;
@@ -123,6 +128,7 @@ export const mockApi = {
       id: uid(), organization_id: body.organization_id, type: body.type, name: body.name,
       is_active: true, firmware_version: null, last_seen: null,
       created_at: new Date().toISOString(), active_profile_id: null,
+      maintenance: null,
     }
     store.units.push(unit)
     store.readings[unit.id] = []
@@ -155,6 +161,39 @@ export const mockApi = {
     unit.is_active = false
     return null
   },
+  startMaintenance: async (unit_id, note) => {
+    await delay()
+    const unit = store.units.find(u => u.id === unit_id)
+    if (!unit) return notFound('Unidad no encontrada')
+    if (unit.maintenance) return conflict('La unidad ya está en mantenimiento')
+    const window = {
+      id: uid(), unit_id, started_at: new Date().toISOString(),
+      started_by: store.currentUser.id, started_by_email: store.currentUser.email,
+      ended_at: null, ended_by: null, ended_by_email: null, note: note || null,
+    }
+    store.maintenance[unit_id] = [window, ...(store.maintenance[unit_id] ?? [])]
+    unit.maintenance = window
+    return window
+  },
+  endMaintenance: async (unit_id) => {
+    await delay()
+    const unit = store.units.find(u => u.id === unit_id)
+    if (!unit) return notFound('Unidad no encontrada')
+    if (!unit.maintenance) return notFound('La unidad no está en mantenimiento')
+    const window = store.maintenance[unit_id].find(w => w.id === unit.maintenance.id)
+    window.ended_at       = new Date().toISOString()
+    window.ended_by       = store.currentUser.id
+    window.ended_by_email = store.currentUser.email
+    unit.maintenance = null
+    return window
+  },
+  getMaintenance: async (unit_id, limit = 20) => {
+    await delay()
+    const unit = store.units.find(u => u.id === unit_id)
+    if (!unit) return notFound('Unidad no encontrada')
+    return (store.maintenance[unit_id] ?? []).slice(0, limit)
+  },
+
   getUnitState: async (unit_id) => {
     await delay(100)
     const live = store.liveState[unit_id]
