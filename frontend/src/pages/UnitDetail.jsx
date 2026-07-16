@@ -162,13 +162,13 @@ export default function UnitDetail() {
                   </span>
                 )}
               </span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-3)' }}>
-                <StatCard value={r.temperature != null ? `${r.temperature} °C` : '—'} label={t('unitDetail.sensorTemperature')}  accent={SENSOR_ACCENTS.temperature} />
-                <StatCard value={r.humidity    != null ? `${r.humidity} %`    : '—'} label={t('unitDetail.sensorHumidity')}       accent={SENSOR_ACCENTS.humidity}    />
-                <StatCard value={r.light       != null ? `${r.light}`         : '—'} label={t('unitDetail.sensorLight')}       accent={SENSOR_ACCENTS.light}       />
-                <StatCard value={r.air_quality != null ? `${r.air_quality}`   : '—'} label={t('unitDetail.sensorAirQuality')}  accent={SENSOR_ACCENTS.air_quality} />
-                <StatCard value={r.methane     != null ? `${r.methane}`       : '—'} label={t('unitDetail.sensorMethane')}        accent={SENSOR_ACCENTS.methane}     />
-                <StatCard value={r.co2         != null ? `${r.co2} ppm`     : '—'} label={t('unitDetail.sensorCo2')}            accent={SENSOR_ACCENTS.co2}         />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(176px, 1fr))', gap: 'var(--space-3)' }}>
+                <StatCard value={r.temperature != null ? r.temperature : '—'} unit={r.temperature != null ? '°C'  : null} label={t('unitDetail.sensorTemperature')} accent={SENSOR_ACCENTS.temperature} />
+                <StatCard value={r.humidity    != null ? r.humidity    : '—'} unit={r.humidity    != null ? '%'   : null} label={t('unitDetail.sensorHumidity')}    accent={SENSOR_ACCENTS.humidity}    />
+                <StatCard value={r.light       != null ? r.light       : '—'}                                             label={t('unitDetail.sensorLight')}       accent={SENSOR_ACCENTS.light}       />
+                <StatCard value={r.air_quality != null ? r.air_quality : '—'}                                             label={t('unitDetail.sensorAirQuality')}  accent={SENSOR_ACCENTS.air_quality} />
+                <StatCard value={r.methane     != null ? r.methane     : '—'}                                             label={t('unitDetail.sensorMethane')}     accent={SENSOR_ACCENTS.methane}     />
+                <StatCard value={r.co2         != null ? r.co2         : '—'} unit={r.co2         != null ? 'ppm' : null} label={t('unitDetail.sensorCo2')}          accent={SENSOR_ACCENTS.co2}         />
               </div>
             </div>
           ) : (
